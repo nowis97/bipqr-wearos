@@ -4,13 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.sonda.wiu'
+    namespace 'com.nowis.bipwear'
     compileSdk 34
 
     defaultConfig {
-        // CRÍTICO: Debe ser idéntico al paquete de Red Movilidad
-        // para que Google Play Services Wearable Data Layer permita la comunicación
-        applicationId "com.sonda.wiu"
+        applicationId "com.nowis.bipwear"
         minSdk 26
         targetSdk 34
         versionCode 1

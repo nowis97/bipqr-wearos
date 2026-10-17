@@ -37,6 +37,10 @@
                 <data
                     android:host="*"
                     android:scheme="wear"
+                    android:pathPrefix="/bip" />
+                <data
+                    android:host="*"
+                    android:scheme="wear"
                     android:pathPrefix="/qr" />
             </intent-filter>
         </service>

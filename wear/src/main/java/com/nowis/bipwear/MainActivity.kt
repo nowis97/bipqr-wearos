@@ -1,4 +1,4 @@
-package com.sonda.wiu
+package com.nowis.bipwear
 
 import androidx.activity.ComponentActivity
 import android.os.Bundle
@@ -26,13 +26,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, MessageClient.OnMessageReceivedListener {
 
     companion object {
         private const val TAG = "BipMainActivity"
+        const val PATH_REQUEST_TICKET = "/bip/request_ticket"
+        const val PATH_TICKET_DATA = "/bip/ticket_data"
+        const val PATH_TICKET_ERROR = "/bip/ticket_error"
         const val PATH_QR_REQUEST = "/qrGenerationRequest"
-        const val PATH_QR_ENABLED = "/qrGenerationEnabled"
         private const val REQUEST_TIMEOUT_MS = 25000L // 25 segundos
     }
 
@@ -53,7 +56,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
             Log.w(TAG, "Tiempo de espera agotado sin respuesta del teléfono")
             Toast.makeText(
                 this,
-                "El teléfono no respondió. Abre la app Red Movilidad en tu teléfono y verifica que esté sin PIN.",
+                "El teléfono no respondió. Verifica que la app puente BipWear esté instalada en el teléfono.",
                 Toast.LENGTH_LONG
             ).show()
             TicketManager.setState(TicketState.Idle)
@@ -140,9 +143,9 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                     return@launch
                 }
 
-                Log.d(TAG, "Enviando $PATH_QR_REQUEST al teléfono: ${phoneNode.displayName} (${phoneNode.id})")
+                Log.d(TAG, "Enviando $PATH_REQUEST_TICKET al teléfono: ${phoneNode.displayName} (${phoneNode.id})")
                 val messageClient = Wearable.getMessageClient(this@MainActivity)
-                messageClient.sendMessage(phoneNode.id, PATH_QR_REQUEST, byteArrayOf()).await()
+                messageClient.sendMessage(phoneNode.id, PATH_REQUEST_TICKET, byteArrayOf()).await()
 
                 withContext(Dispatchers.Main) {
                     txtLoading.text = getString(R.string.status_generating)
@@ -171,7 +174,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                 val path = uri.path ?: ""
                 Log.d(TAG, "DataEvent path en MainActivity: $path")
 
-                if (path.startsWith("/qr")) {
+                if (path.startsWith("/qr") || path.startsWith("/bip")) {
                     val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
                     lifecycleScope.launch(Dispatchers.IO) {
                         val success = TicketManager.processDataMap(dataClient, dataMap)
@@ -191,10 +194,21 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
      */
     override fun onMessageReceived(messageEvent: MessageEvent) {
         val path = messageEvent.path
-        Log.d(TAG, "MainActivity.onMessageReceived en path: $path")
+        val data = messageEvent.data
+        Log.d(TAG, "MainActivity.onMessageReceived en path: $path, bytes: ${data?.size ?: 0}")
 
-        if (path.startsWith("/qr")) {
-            val data = messageEvent.data
+        if (path == PATH_TICKET_ERROR) {
+            val errorMsg = if (data != null && data.isNotEmpty()) {
+                String(data, StandardCharsets.UTF_8)
+            } else {
+                "Error al generar pasaje en el teléfono"
+            }
+            timeoutHandler.removeCallbacks(timeoutRunnable)
+            TicketManager.setState(TicketState.Error(errorMsg))
+            return
+        }
+
+        if (path.startsWith("/qr") || path.startsWith("/bip")) {
             if (data != null && data.isNotEmpty()) {
                 val success = TicketManager.processPayload(data)
                 if (success) {

@@ -1,4 +1,4 @@
-package com.sonda.wiu
+package com.nowis.bipwear
 
 import android.content.Intent
 import android.util.Log
@@ -12,13 +12,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.nio.charset.StandardCharsets
 
 class BipWearListenerService : WearableListenerService() {
 
     companion object {
         private const val TAG = "BipWearListener"
+        const val PATH_TICKET_DATA = "/bip/ticket_data"
+        const val PATH_TICKET_ERROR = "/bip/ticket_error"
         const val PATH_QR_DATA_SYNC = "/qrDataSync"
-        const val PATH_QR_GEN_ENABLED_RESPONSE = "/qrGenerationEnabledResponse"
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -33,7 +35,7 @@ class BipWearListenerService : WearableListenerService() {
                 val path = uri.path ?: ""
                 Log.d(TAG, "DataEvent TYPE_CHANGED en path: $path, URI: $uri")
 
-                if (path.startsWith("/qr")) {
+                if (path.startsWith("/qr") || path.startsWith("/bip")) {
                     val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
                     serviceScope.launch {
                         val success = TicketManager.processDataMap(dataClient, dataMap)
@@ -52,16 +54,22 @@ class BipWearListenerService : WearableListenerService() {
         Log.d(TAG, "onMessageReceived en path: $path, bytes: ${data?.size ?: 0}")
 
         when {
-            path.startsWith("/qr") -> {
+            path == PATH_TICKET_ERROR -> {
+                val errorMsg = if (data != null && data.isNotEmpty()) {
+                    String(data, StandardCharsets.UTF_8)
+                } else {
+                    "Error desconocido en el teléfono"
+                }
+                TicketManager.setState(TicketState.Error(errorMsg))
+                openMainActivity()
+            }
+            path.startsWith("/bip") || path.startsWith("/qr") -> {
                 if (data != null && data.isNotEmpty()) {
                     val success = TicketManager.processPayload(data)
                     if (success) {
                         openMainActivity()
                     }
                 }
-            }
-            path == PATH_QR_GEN_ENABLED_RESPONSE -> {
-                Log.d(TAG, "Handshake /qrGenerationEnabledResponse recibido")
             }
             else -> {
                 Log.d(TAG, "Ruta de mensaje no manejada: $path")

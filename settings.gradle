@@ -20,4 +20,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BipQrWear"
-include ':app'
+include ':wear'
+include ':mobile'

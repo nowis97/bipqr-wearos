@@ -1,64 +1,81 @@
-# bip!QR Wear OS Companion (Red Movilidad)
+# bip!QR Wear OS Bridge (Red Movilidad)
 
-Aplicación complementaria para relojes inteligentes con **Wear OS** (Samsung Galaxy Watch 4/5/6/7, Google Pixel Watch, TicWatch, etc.) para sincronizar y desplegar boletos dinámicos **bip!QR** de la red de transporte metropolitano de Santiago, Chile.
-
----
-
-## 🔍 Contexto y Arquitectura Descubierta
-
-Mediante ingeniería inversa sobre el APK oficial de **Red Movilidad** (`com.sonda.wiu` v3.26.1):
-1. Se descubrió que la aplicación oficial **ya contiene el módulo de integración para Wear OS** utilizando el canal `flutter_wear_os_connectivity` y las APIs de Google Play Services Wearable (`NodeClient`, `MessageClient`).
-2. La aplicación utiliza el protocolo:
-   - **`/qrGenerationRequest`**: Solicitud enviada por el reloj al teléfono vía Bluetooth.
-   - **`/qrDataSync`**: Trama enviada por el teléfono al reloj con la imagen comprimida del **Aztec Code** y la vigencia temporal.
-3. Para que Google Play Services permita la comunicación entre el teléfono y el reloj, **ambas aplicaciones deben compartir el mismo `applicationId`** (`com.sonda.wiu`).
+Solución multi-módulo (`:mobile` + `:wear`) para desplegar boletos dinámicos **bip!QR** de la red de transporte metropolitano de Santiago, Chile, en relojes inteligentes con **Wear OS** (Samsung Galaxy Watch 4/5/6/7, Google Pixel Watch, TicWatch, etc.).
 
 ---
 
-## 📋 Requisitos Previos
+## 🏗️ Arquitectura de la Solución (App Puente)
 
-1. **Android Studio** (Hedgehog, Iguana, Jellyfish o superior) con SDK de Android 34 instalado.
-2. Teléfono Android con la app oficial **Red Movilidad** instalada y sesión iniciada con ClaveÚnica.
-3. **Importante (PIN):** En la app de Red Movilidad en el teléfono, ve a *Ajustes > Pagar con QR > Desactivar PIN* (o déjalo sin PIN configurado). La app oficial requiere esto para que el servicio en segundo plano pueda firmar el pasaje con la llave privada ECDSA automáticamente cuando el reloj lo solicite.
-4. Reloj con **Wear OS** emparejado con tu teléfono.
+Google Play Services Wearable Data Layer (`MessageClient` / `DataClient`) exige estrictamente que la aplicación en el teléfono y en el reloj inteligente compartan tanto el mismo **`applicationId`** como la **misma firma criptográfica (keystore)**.
 
----
+Dado que la app oficial de Red Movilidad (`com.sonda.wiu`) está firmada con la llave privada de producción de SONDA y no permite instalar versiones debug paralelas en el teléfono, este proyecto implementa una **App Puente**:
 
-## 🚀 Cómo Compilar e Instalar
-
-### Paso 1: Abrir en Android Studio
-1. Abre Android Studio.
-2. Selecciona **Open** y navega a la carpeta:
-   `c:\Users\NOWIS\Documents\bipqr-wearos`
-3. Deja que Gradle sincronice las dependencias (`play-services-wearable`, AndroidX Wear, etc.).
-
-### Paso 2: Activar Depuración en el Reloj
-1. En tu reloj Wear OS, ve a:
-   **Ajustes > Información del reloj > Software** y presiona repetidamente (7 veces) en **Número de compilación** hasta activar el modo desarrollador.
-2. Ve a **Ajustes > Opciones de desarrollador**:
-   - Activa **Depuración ADB**.
-   - Activa **Depuración inalámbrica (Wi-Fi)**.
-3. Anota la dirección IP y el puerto que muestra la pantalla (ejemplo: `192.168.1.50:5555`).
-
-### Paso 3: Conectar por ADB e Instalar
-En tu terminal de PowerShell:
-```powershell
-adb connect 192.168.1.50:5555
 ```
-*(Acepta la confirmación de huella digital que aparecerá en la pantalla del reloj).*
-
-Compila e instala directamente desde Android Studio seleccionando tu reloj como dispositivo destino, o vía comando:
-```powershell
-./gradlew installDebug
+[ Reloj Wear OS ] (:wear)
+  │  (applicationId: com.nowis.bipwear)
+  │
+  │  1. Presionar "Generar Pasaje"
+  ▼  (Envía mensaje Bluetooth /bip/request_ticket)
+[ Teléfono - App Puente ] (:mobile)
+  │  (applicationId: com.nowis.bipwear - misma firma debug)
+  │
+  │  2. Servicio de Accesibilidad detecta solicitud y abre Red Movilidad (com.sonda.wiu)
+  │  3. Captura el boleto Aztec mediante takeScreenshot() (API 30+)
+  │  4. Decodifica el Aztec con ZXing y genera imagen HD nítida para el reloj
+  ▼  (Envía imagen comprimida vía /bip/ticket_data y /qrDataSync)
+[ Reloj Wear OS ] (:wear)
+  │  5. Muestra el código con brillo al 100% y temporizador de 120s
+  ▼
+[ Validador Metro / Bus ] (Lectura exitosa)
 ```
 
 ---
 
-## 🎫 Cómo Usar
+## 📦 Estructura del Proyecto
 
-1. Abre la app **bip!QR** en el reloj.
-2. Presiona el botón rojo **"Generar Pasaje"**.
-3. El reloj enviará la señal `/qrGenerationRequest` a tu teléfono por Bluetooth.
-4. Tu teléfono contactará al servidor de Sonda, inyectará la telemetría GPS, firmará con ECDSA y enviará la imagen del código Azteca de regreso al reloj vía `/qrDataSync`.
-5. La pantalla del reloj se pondrá con brillo al 100% mostrando el código de barras y un contador regresivo de vigencia.
-6. ¡Acerca la pantalla del reloj al validador del bus o torniquete de Metro para validar tu pasaje!
+* **`:mobile`**: Aplicación complementaria para el teléfono Android. Contiene:
+  * `MainActivity`: Panel de diagnóstico (estado de conexión del reloj, botón para probar envío de ticket demo).
+  * `BipAccessibilityService`: Servicio de accesibilidad para automatizar la captura de pantalla del boleto en Red Movilidad sin tocar el teléfono.
+  * `PhoneWearListenerService`: Servicio receptor en segundo plano que escucha peticiones del reloj por Bluetooth.
+  * `AztecTicketProcessor`: Motor ZXing para decodificar y generar códigos Aztec nítidos de alto contraste.
+* **`:wear`**: Aplicación para el smartwatch con Wear OS. Contiene:
+  * `MainActivity`: Interfaz de usuario adaptada a pantallas redondas con botón de generación, visualización de código Aztec a brillo máximo y cuenta regresiva.
+  * `BipWearListenerService`: Receptor en segundo plano para sincronizar boletos de forma automática.
+  * `TicketManager`: Manejador de estado y decodificador de datos binarios y Assets.
+
+---
+
+## 🚀 Guía de Instalación y Uso
+
+### 1. Requisitos
+* Android Studio (Koala, Jellyfish, Iguana o superior) con SDK 34.
+* Teléfono Android con la app oficial **Red Movilidad** instalada y con sesión iniciada en bip!QR.
+* Reloj con **Wear OS** emparejado con tu teléfono por Bluetooth.
+
+### 2. Compilar e Instalar en el Teléfono
+1. Conecta tu teléfono por USB o Wi-Fi con depuración activada.
+2. En Android Studio, selecciona la configuración de ejecución **`mobile`** y presiona **Run** (o ejecuta en terminal):
+   ```powershell
+   ./gradlew :mobile:installDebug
+   ```
+3. Abre la app **bip!QR Puente** en tu teléfono.
+4. Presiona **"Activar Servicio de Accesibilidad"** y habilita el servicio **Puente bip!QR Wear OS**.
+5. Verifica que en la tarjeta del reloj indique **"Conectado a: [Nombre de tu reloj]"**.
+6. (Opcional) Presiona **"Enviar Código de Prueba al Reloj"** para verificar la comunicación Bluetooth.
+
+### 3. Compilar e Instalar en el Reloj
+1. En tu reloj Wear OS, ve a **Ajustes > Opciones de desarrollador** y activa **Depuración inalámbrica (Wi-Fi)**.
+2. Conecta tu PC al reloj vía ADB:
+   ```powershell
+   adb connect <IP_DEL_RELOJ>:<PUERTO>
+   ```
+3. En Android Studio, selecciona la configuración de ejecución **`wear`** y presiona **Run** (o ejecuta en terminal):
+   ```powershell
+   ./gradlew :wear:installDebug
+   ```
+
+### 4. Uso Diario
+1. En tu reloj, abre **bip!QR**.
+2. Presiona **"Generar Pasaje"**.
+3. El reloj se comunicará por Bluetooth con la app puente en el teléfono, la cual capturará el boleto oficial y se lo enviará al reloj en menos de 2 segundos.
+4. Acerca la pantalla de tu reloj al torniquete del Metro o al validador del bus.

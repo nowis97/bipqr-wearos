@@ -1,4 +1,4 @@
-package com.sonda.wiu
+package com.nowis.bipwear
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

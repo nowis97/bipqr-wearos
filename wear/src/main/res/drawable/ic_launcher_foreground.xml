@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Stylized Aztec/QR box icon -->
+    <path
+        android:fillColor="@color/white"
+        android:pathData="M30,30h16v16h-16z M62,30h16v16h-16z M30,62h16v16h-16z M48,48h12v12h-12z M64,64h6v6h-6z M72,64h6v6h-6z M64,72h6v6h-6z M72,72h6v6h-6z" />
+</vector>
