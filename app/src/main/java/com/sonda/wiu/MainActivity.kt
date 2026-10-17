@@ -3,16 +3,23 @@ package com.sonda.wiu
 import android.app.Activity
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.wearable.DataClient
+import com.google.android.gms.wearable.DataEvent
+import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.MessageClient
+import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.Dispatchers
@@ -20,12 +27,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
-class MainActivity : Activity() {
+class MainActivity : Activity(), DataClient.OnDataChangedListener, MessageClient.OnMessageReceivedListener {
 
     companion object {
         private const val TAG = "BipMainActivity"
         const val PATH_QR_REQUEST = "/qrGenerationRequest"
         const val PATH_QR_ENABLED = "/qrGenerationEnabled"
+        private const val REQUEST_TIMEOUT_MS = 25000L // 25 segundos
     }
 
     private lateinit var layoutIdle: LinearLayout
@@ -39,6 +47,18 @@ class MainActivity : Activity() {
     private lateinit var txtTimer: TextView
 
     private var countDownTimer: CountDownTimer? = null
+    private val timeoutHandler = Handler(Looper.getMainLooper())
+    private val timeoutRunnable = Runnable {
+        if (TicketManager.ticketState.value is TicketState.Loading) {
+            Log.w(TAG, "Tiempo de espera agotado sin respuesta del teléfono")
+            Toast.makeText(
+                this,
+                "El teléfono no respondió. Abre la app Red Movilidad en tu teléfono y verifica que esté sin PIN.",
+                Toast.LENGTH_LONG
+            ).show()
+            TicketManager.setState(TicketState.Idle)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +66,19 @@ class MainActivity : Activity() {
 
         initViews()
         observeTicketState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Escucha en tiempo real tanto DataItems como Mensajes de Google Play Services Wearable
+        Wearable.getDataClient(this).addListener(this)
+        Wearable.getMessageClient(this).addListener(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Wearable.getDataClient(this).removeListener(this)
+        Wearable.getMessageClient(this).removeListener(this)
     }
 
     private fun initViews() {
@@ -63,7 +96,6 @@ class MainActivity : Activity() {
             solicitarGeneracionPasaje()
         }
 
-        // Tocar el boleto permite refrescar o solicitar uno nuevo
         layoutTicket.setOnClickListener {
             solicitarGeneracionPasaje()
         }
@@ -75,8 +107,14 @@ class MainActivity : Activity() {
                 when (state) {
                     is TicketState.Idle -> showIdleView()
                     is TicketState.Loading -> showLoadingView(state.message)
-                    is TicketState.Active -> showTicketView(state.ticket)
-                    is TicketState.Error -> showErrorView(state.errorMessage)
+                    is TicketState.Active -> {
+                        timeoutHandler.removeCallbacks(timeoutRunnable)
+                        showTicketView(state.ticket)
+                    }
+                    is TicketState.Error -> {
+                        timeoutHandler.removeCallbacks(timeoutRunnable)
+                        showErrorView(state.errorMessage)
+                    }
                 }
             }
         }
@@ -84,6 +122,8 @@ class MainActivity : Activity() {
 
     private fun solicitarGeneracionPasaje() {
         TicketManager.setState(TicketState.Loading(getString(R.string.status_requesting)))
+        timeoutHandler.removeCallbacks(timeoutRunnable)
+        timeoutHandler.postDelayed(timeoutRunnable, REQUEST_TIMEOUT_MS)
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -93,13 +133,14 @@ class MainActivity : Activity() {
 
                 if (phoneNode == null) {
                     withContext(Dispatchers.Main) {
+                        timeoutHandler.removeCallbacks(timeoutRunnable)
                         Toast.makeText(this@MainActivity, getString(R.string.status_no_phone), Toast.LENGTH_SHORT).show()
                         TicketManager.setState(TicketState.Idle)
                     }
                     return@launch
                 }
 
-                Log.d(TAG, "Enviando $PATH_QR_REQUEST al nodo del teléfono: ${phoneNode.displayName} (${phoneNode.id})")
+                Log.d(TAG, "Enviando $PATH_QR_REQUEST al teléfono: ${phoneNode.displayName} (${phoneNode.id})")
                 val messageClient = Wearable.getMessageClient(this@MainActivity)
                 messageClient.sendMessage(phoneNode.id, PATH_QR_REQUEST, byteArrayOf()).await()
 
@@ -109,8 +150,55 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Fallo al enviar mensaje al teléfono", e)
                 withContext(Dispatchers.Main) {
+                    timeoutHandler.removeCallbacks(timeoutRunnable)
                     Toast.makeText(this@MainActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     TicketManager.setState(TicketState.Idle)
+                }
+            }
+        }
+    }
+
+    /**
+     * Captura eventos de DataClient en tiempo real mientras MainActivity está abierta.
+     */
+    override fun onDataChanged(dataEvents: DataEventBuffer) {
+        Log.d(TAG, "MainActivity.onDataChanged: ${dataEvents.count} eventos recibidos")
+        val dataClient = Wearable.getDataClient(this)
+
+        for (event in dataEvents) {
+            if (event.type == DataEvent.TYPE_CHANGED) {
+                val uri = event.dataItem.uri
+                val path = uri.path ?: ""
+                Log.d(TAG, "DataEvent path en MainActivity: $path")
+
+                if (path.startsWith("/qr")) {
+                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val success = TicketManager.processDataMap(dataClient, dataMap)
+                        if (success) {
+                            withContext(Dispatchers.Main) {
+                                timeoutHandler.removeCallbacks(timeoutRunnable)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Captura mensajes en tiempo real mientras MainActivity está abierta.
+     */
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        val path = messageEvent.path
+        Log.d(TAG, "MainActivity.onMessageReceived en path: $path")
+
+        if (path.startsWith("/qr")) {
+            val data = messageEvent.data
+            if (data != null && data.isNotEmpty()) {
+                val success = TicketManager.processPayload(data)
+                if (success) {
+                    timeoutHandler.removeCallbacks(timeoutRunnable)
                 }
             }
         }
@@ -140,7 +228,6 @@ class MainActivity : Activity() {
         imgQrCode.setImageBitmap(ticket.bitmap)
         maximizeScreenBrightness()
 
-        // Iniciar temporizador de caducidad
         countDownTimer?.cancel()
         val durationMs = (ticket.expiryTimestampMs - System.currentTimeMillis()).coerceAtLeast(10 * 1000)
 
@@ -180,6 +267,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        timeoutHandler.removeCallbacks(timeoutRunnable)
         countDownTimer?.cancel()
     }
 }
