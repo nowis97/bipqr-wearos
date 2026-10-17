@@ -1,13 +1,12 @@
 package com.sonda.wiu
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -20,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "BipMainActivity"
