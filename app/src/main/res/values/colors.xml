@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="red_primary">#E30613</color>
+    <color name="red_dark">#B0000C</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+    <color name="dark_surface">#1C1C1E</color>
+    <color name="dark_card">#2C2C2E</color>
+    <color name="gray_text">#8E8E93</color>
+    <color name="accent_green">#34C759</color>
+    <color name="ticket_bg">#FFFFFF</color>
+</resources>

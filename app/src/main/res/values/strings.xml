@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">bip!QR Watch</string>
+    <string name="btn_generate">Generar Pasaje</string>
+    <string name="btn_refresh">Actualizar</string>
+    <string name="status_ready">Toca para generar pasaje</string>
+    <string name="status_requesting">Solicitando al teléfono...</string>
+    <string name="status_generating">Generando código en teléfono...</string>
+    <string name="status_ticket_ready">Acerca el reloj al validador</string>
+    <string name="status_no_phone">Teléfono no conectado</string>
+    <string name="status_expired">Pasaje expirado</string>
+    <string name="status_error">Error de comunicación</string>
+</resources>
