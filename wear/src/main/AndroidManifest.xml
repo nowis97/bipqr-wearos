@@ -3,6 +3,8 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
@@ -11,10 +13,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BipQrWear">
 
-        <!-- Declara explícitamente que es una app complementaria vinculada al teléfono -->
+        <!-- App 100% Standalone para generar pasajes bip!QR directamente en el reloj -->
         <meta-data
             android:name="com.google.android.wearable.standalone"
-            android:value="false" />
+            android:value="true" />
 
         <activity
             android:name=".MainActivity"

@@ -57,4 +57,5 @@ dependencies {
 
     // ZXing for Aztec code scanning and generation
     implementation 'com.google.zxing:core:3.5.3'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 }

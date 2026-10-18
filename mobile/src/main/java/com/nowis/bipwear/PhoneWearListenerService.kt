@@ -1,5 +1,6 @@
 package com.nowis.bipwear
 
+import android.content.Context
 import android.util.Log
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.PutDataMapRequest
@@ -16,11 +17,31 @@ class PhoneWearListenerService : WearableListenerService() {
 
     companion object {
         private const val TAG = "PhoneWearListener"
+        const val PATH_STANDALONE_CONFIG = "/bip/standalone_config"
+        const val PATH_REFRESH_SEED = "/bip/refresh_seed"
         const val PATH_REQUEST_TICKET = "/bip/request_ticket"
         const val PATH_QR_REQUEST = "/qrGenerationRequest"
-        const val PATH_TICKET_DATA = "/bip/ticket_data"
         const val PATH_TICKET_ERROR = "/bip/ticket_error"
-        const val PATH_QR_DATA_SYNC = "/qrDataSync"
+
+        suspend fun pushConfigToWatches(context: Context, config: StandaloneConfig): Int {
+            val jsonStr = config.toJson().toString()
+            val jsonBytes = jsonStr.toByteArray(StandardCharsets.UTF_8)
+
+            // 1. Persist in Wearable DataClient so the watch receives it even if asleep
+            val putReq = PutDataMapRequest.create(PATH_STANDALONE_CONFIG).apply {
+                dataMap.putString("config_json", jsonStr)
+                dataMap.putLong("updated_at", System.currentTimeMillis())
+            }.asPutDataRequest().setUrgent()
+            Wearable.getDataClient(context).putDataItem(putReq).await()
+
+            // 2. Send immediate real-time message to all connected watch nodes
+            val nodes = Wearable.getNodeClient(context).connectedNodes.await()
+            val messageClient = Wearable.getMessageClient(context)
+            for (node in nodes) {
+                messageClient.sendMessage(node.id, PATH_STANDALONE_CONFIG, jsonBytes).await()
+            }
+            return nodes.size
+        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -30,59 +51,29 @@ class PhoneWearListenerService : WearableListenerService() {
         val sourceNodeId = messageEvent.sourceNodeId
         Log.i(TAG, "Mensaje recibido desde el reloj ($sourceNodeId) en ruta: $path")
 
-        if (path == PATH_REQUEST_TICKET || path == PATH_QR_REQUEST) {
-            handleTicketRequest(sourceNodeId)
+        if (path == PATH_REFRESH_SEED || path == PATH_REQUEST_TICKET || path == PATH_QR_REQUEST) {
+            handleSilentSeedRefresh(sourceNodeId)
         }
     }
 
-    private fun handleTicketRequest(nodeId: String) {
-        Log.i(TAG, "Iniciando proceso de generación y captura para el nodo $nodeId")
-
-        BipAccessibilityService.triggerTicketCapture(
-            context = this,
-            onSuccess = { ticketBytes ->
-                serviceScope.launch {
-                    sendTicketToWatch(nodeId, ticketBytes)
-                }
-            },
-            onError = { errorMessage ->
-                serviceScope.launch {
-                    sendErrorToWatch(nodeId, errorMessage)
+    /**
+     * Silently renews the 2-hour `tramaSistemaCentral` seed via HTTPS in the background
+     * without waking the phone screen or opening any app, and pushes the updated config to the watch.
+     */
+    private fun handleSilentSeedRefresh(nodeId: String) {
+        serviceScope.launch {
+            try {
+                val updatedCfg = RedApiClient.requestC2dSeed(applicationContext)
+                pushConfigToWatches(applicationContext, updatedCfg)
+                Log.i(TAG, "Semilla C2D renovada silenciosamente y enviada al reloj ($nodeId)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error renovando semilla C2D en segundo plano", e)
+                try {
+                    val msg = ("Error C2D: ${e.localizedMessage ?: "Fallo de red"}").toByteArray(StandardCharsets.UTF_8)
+                    Wearable.getMessageClient(applicationContext).sendMessage(nodeId, PATH_TICKET_ERROR, msg).await()
+                } catch (_: Exception) {
                 }
             }
-        )
-    }
-
-    private suspend fun sendTicketToWatch(nodeId: String, ticketBytes: ByteArray) {
-        try {
-            Log.i(TAG, "Transmitiendo pasaje (${ticketBytes.size} bytes) al reloj...")
-            val messageClient = Wearable.getMessageClient(this)
-
-            // Enviar por ambas rutas (/bip/ticket_data y /qrDataSync) para compatibilidad absoluta
-            messageClient.sendMessage(nodeId, PATH_TICKET_DATA, ticketBytes).await()
-            messageClient.sendMessage(nodeId, PATH_QR_DATA_SYNC, ticketBytes).await()
-
-            // También publicar en DataClient (DataMap)
-            val putDataMapReq = PutDataMapRequest.create("/bip/ticket").apply {
-                dataMap.putByteArray("ticket_image", ticketBytes)
-                dataMap.putLong("timestamp", System.currentTimeMillis())
-            }
-            Wearable.getDataClient(this).putDataItem(putDataMapReq.asPutDataRequest().setUrgent()).await()
-
-            Log.i(TAG, "¡Pasaje enviado exitosamente al smartwatch!")
-        } catch (e: Exception) {
-            Log.e(TAG, "Fallo al enviar pasaje vía Wearable API", e)
-        }
-    }
-
-    private suspend fun sendErrorToWatch(nodeId: String, errorMessage: String) {
-        try {
-            Log.w(TAG, "Enviando notificación de error al reloj: $errorMessage")
-            val messageClient = Wearable.getMessageClient(this)
-            val errorBytes = errorMessage.toByteArray(StandardCharsets.UTF_8)
-            messageClient.sendMessage(nodeId, PATH_TICKET_ERROR, errorBytes).await()
-        } catch (e: Exception) {
-            Log.e(TAG, "Fallo al transmitir error al reloj", e)
         }
     }
 }

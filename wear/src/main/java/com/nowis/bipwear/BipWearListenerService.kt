@@ -18,6 +18,7 @@ class BipWearListenerService : WearableListenerService() {
 
     companion object {
         private const val TAG = "BipWearListener"
+        const val PATH_STANDALONE_CONFIG = "/bip/standalone_config"
         const val PATH_TICKET_DATA = "/bip/ticket_data"
         const val PATH_TICKET_ERROR = "/bip/ticket_error"
         const val PATH_QR_DATA_SYNC = "/qrDataSync"
@@ -33,15 +34,12 @@ class BipWearListenerService : WearableListenerService() {
             if (event.type == DataEvent.TYPE_CHANGED) {
                 val uri = event.dataItem.uri
                 val path = uri.path ?: ""
-                Log.d(TAG, "DataEvent TYPE_CHANGED en path: $path, URI: $uri")
+                Log.d(TAG, "DataEvent TYPE_CHANGED en path: $path")
 
                 if (path.startsWith("/qr") || path.startsWith("/bip")) {
                     val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
                     serviceScope.launch {
-                        val success = TicketManager.processDataMap(dataClient, dataMap)
-                        if (success) {
-                            openMainActivity()
-                        }
+                        TicketManager.processDataMap(applicationContext, dataClient, dataMap)
                     }
                 }
             }
@@ -54,25 +52,27 @@ class BipWearListenerService : WearableListenerService() {
         Log.d(TAG, "onMessageReceived en path: $path, bytes: ${data?.size ?: 0}")
 
         when {
+            path == PATH_STANDALONE_CONFIG -> {
+                if (data != null && data.isNotEmpty()) {
+                    val jsonStr = String(data, StandardCharsets.UTF_8)
+                    TicketManager.importStandaloneConfigJson(applicationContext, jsonStr)
+                }
+            }
             path == PATH_TICKET_ERROR -> {
                 val errorMsg = if (data != null && data.isNotEmpty()) {
                     String(data, StandardCharsets.UTF_8)
                 } else {
-                    "Error desconocido en el teléfono"
+                    "Error al sincronizar cuenta bip!QR"
                 }
                 TicketManager.setState(TicketState.Error(errorMsg))
-                openMainActivity()
             }
             path.startsWith("/bip") || path.startsWith("/qr") -> {
                 if (data != null && data.isNotEmpty()) {
-                    val success = TicketManager.processPayload(data)
-                    if (success) {
+                    val handled = TicketManager.processPayload(applicationContext, data)
+                    if (handled && path != PATH_STANDALONE_CONFIG) {
                         openMainActivity()
                     }
                 }
-            }
-            else -> {
-                Log.d(TAG, "Ruta de mensaje no manejada: $path")
             }
         }
     }

@@ -4,10 +4,11 @@
     <string name="btn_generate">Generar Pasaje</string>
     <string name="btn_refresh">Actualizar</string>
     <string name="status_ready">Toca para generar pasaje</string>
-    <string name="status_requesting">Solicitando al teléfono...</string>
-    <string name="status_generating">Generando código en teléfono...</string>
+    <string name="status_not_provisioned">Vincula tu cuenta 1 sola vez desde BipWear en el teléfono</string>
+    <string name="status_requesting">Renovando semilla C2D...</string>
+    <string name="status_generating">Firmando pasaje C2D en reloj...</string>
     <string name="status_ticket_ready">Acerca el reloj al validador</string>
-    <string name="status_no_phone">Teléfono no conectado</string>
-    <string name="status_expired">Pasaje expirado</string>
-    <string name="status_error">Error de comunicación</string>
+    <string name="status_no_phone">Sin conexión para renovar semilla (2h)</string>
+    <string name="status_expired">Pasaje expirado · Toca para renovar</string>
+    <string name="status_error">Error al generar pasaje</string>
 </resources>

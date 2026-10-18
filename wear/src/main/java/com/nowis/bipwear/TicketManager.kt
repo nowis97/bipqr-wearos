@@ -1,5 +1,6 @@
 package com.nowis.bipwear
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
@@ -16,7 +17,9 @@ import java.nio.charset.StandardCharsets
 
 data class TicketData(
     val bitmap: Bitmap,
-    val expiryTimestampMs: Long = System.currentTimeMillis() + (120 * 1000)
+    val expiryTimestampMs: Long = System.currentTimeMillis() + (120 * 1000),
+    val refreshIntervalSec: Int = 5,
+    val saldo: Int = 0
 )
 
 sealed class TicketState {
@@ -28,27 +31,60 @@ sealed class TicketState {
 
 object TicketManager {
     private const val TAG = "TicketManager"
+    const val PATH_STANDALONE_CONFIG = "/bip/standalone_config"
 
     private val _ticketState = MutableStateFlow<TicketState>(TicketState.Idle)
     val ticketState: StateFlow<TicketState> = _ticketState.asStateFlow()
+
+    private val _configVersion = MutableStateFlow(0L)
+    val configVersion: StateFlow<Long> = _configVersion.asStateFlow()
 
     fun setState(state: TicketState) {
         _ticketState.value = state
     }
 
+    fun notifyConfigUpdated() {
+        _configVersion.value = System.currentTimeMillis()
+    }
+
     /**
-     * Procesa eventos de DataClient (PutDataMapRequest / DataItem) provenientes de Red Movilidad.
+     * Imports a JSON StandaloneConfig received from the phone during one-time provisioning
+     * or background C2D seed refresh.
      */
-    suspend fun processDataMap(dataClient: DataClient, dataMap: DataMap): Boolean {
+    fun importStandaloneConfigJson(context: Context, jsonStr: String): Boolean {
+        return try {
+            val json = JSONObject(jsonStr)
+            val cfg = StandaloneConfig.fromJson(json)
+            if (cfg.privKeyBase64.isNotEmpty() || cfg.tramaSistemaCentral.isNotEmpty()) {
+                BipC2dEngine.saveConfig(context, cfg)
+                notifyConfigUpdated()
+                Log.i(TAG, "StandaloneConfig sincronizada en el reloj (rut=${cfg.rut}, nuAbt=${cfg.nuAbt})")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error importando StandaloneConfig JSON", e)
+            false
+        }
+    }
+
+    suspend fun processDataMap(context: Context, dataClient: DataClient, dataMap: DataMap): Boolean {
         Log.d(TAG, "Procesando DataMap con ${dataMap.size()} llaves: ${dataMap.keySet()}")
 
-        // 1. Buscar en archivos adjuntos (la app oficial usa mVar.h("file#" + key, mVar2 con asset))
+        val configJson = dataMap.getString("config_json")
+        if (!configJson.isNullOrEmpty()) {
+            if (importStandaloneConfigJson(context, configJson)) {
+                return true
+            }
+        }
+
+        // Legacy / fallback image support
         for (key in dataMap.keySet()) {
             if (key.startsWith("file#")) {
                 val fileDataMap = dataMap.getDataMap(key)
                 val asset = fileDataMap?.getAsset("asset")
                 if (asset != null) {
-                    Log.d(TAG, "Encontrado asset en sub-map: $key")
                     val bitmap = loadBitmapFromAsset(dataClient, asset)
                     if (bitmap != null) {
                         _ticketState.value = TicketState.Active(TicketData(bitmap = bitmap))
@@ -58,11 +94,9 @@ object TicketManager {
             }
         }
 
-        // 2. Buscar Asset directo
         for (key in dataMap.keySet()) {
             val asset = dataMap.getAsset(key)
             if (asset != null) {
-                Log.d(TAG, "Encontrado asset directo en llave: $key")
                 val bitmap = loadBitmapFromAsset(dataClient, asset)
                 if (bitmap != null) {
                     _ticketState.value = TicketState.Active(TicketData(bitmap = bitmap))
@@ -71,33 +105,28 @@ object TicketManager {
             }
         }
 
-        // 3. Buscar ByteArray directo (rawMapData)
         for (key in dataMap.keySet()) {
             val bytes = dataMap.getByteArray(key)
             if (bytes != null && bytes.isNotEmpty()) {
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bitmap != null) {
-                    Log.d(TAG, "Encontrada imagen en ByteArray de llave: $key")
                     _ticketState.value = TicketState.Active(TicketData(bitmap = bitmap))
                     return true
                 }
             }
         }
 
-        // 4. Buscar String (Base64 o JSON)
         for (key in dataMap.keySet()) {
             val str = dataMap.getString(key)
             if (!str.isNullOrEmpty()) {
                 val decoded = decodeStringOrJson(str)
                 if (decoded != null) {
-                    Log.d(TAG, "Encontrada imagen decodificada desde String en llave: $key")
                     _ticketState.value = TicketState.Active(TicketData(bitmap = decoded))
                     return true
                 }
             }
         }
 
-        Log.e(TAG, "No se encontró ninguna imagen válida en el DataMap")
         return false
     }
 
@@ -111,32 +140,29 @@ object TicketManager {
         }
     }
 
-    /**
-     * Procesa los bytes recibidos desde Red Movilidad vía Bluetooth (/qrDataSync por MessageClient).
-     */
-    fun processPayload(data: ByteArray): Boolean {
+    fun processPayload(context: Context, data: ByteArray): Boolean {
         try {
+            val text = String(data, StandardCharsets.UTF_8).trim()
+            if (text.startsWith("{") && text.contains("privKeyBase64")) {
+                return importStandaloneConfigJson(context, text)
+            }
+
             val directBitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
             if (directBitmap != null) {
-                Log.d(TAG, "Imagen recibida y decodificada directamente (${directBitmap.width}x${directBitmap.height})")
                 _ticketState.value = TicketState.Active(TicketData(bitmap = directBitmap))
                 return true
             }
 
-            val text = String(data, StandardCharsets.UTF_8).trim()
             val decoded = decodeStringOrJson(text)
             if (decoded != null) {
-                Log.d(TAG, "Imagen JSON decodificada exitosamente")
                 _ticketState.value = TicketState.Active(TicketData(bitmap = decoded))
                 return true
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error decodificando payload de boleto", e)
-            _ticketState.value = TicketState.Error("Error al procesar boleto: ${e.message}")
+            Log.e(TAG, "Error decodificando payload", e)
+            _ticketState.value = TicketState.Error("Error al procesar datos: ${e.message}")
             return false
         }
-
-        _ticketState.value = TicketState.Error("Formato de pasaje no reconocido")
         return false
     }
 

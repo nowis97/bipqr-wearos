@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
-    <queries>
-        <package android:name="com.sonda.wiu" />
-    </queries>
 
     <application
         android:allowBackup="true"
@@ -15,7 +11,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.BipBridge">
+        android:theme="@style/Theme.BipBridge"
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
@@ -26,7 +23,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Receptor en segundo plano de mensajes del smartwatch -->
+        <!-- Servicio silencioso en segundo plano para respaldar renovación de semilla C2D si el reloj no tiene Wi-Fi/LTE directo -->
         <service
             android:name=".PhoneWearListenerService"
             android:exported="true">
@@ -41,20 +38,6 @@
                     android:scheme="wear"
                     android:pathPrefix="/qr" />
             </intent-filter>
-        </service>
-
-        <!-- Servicio de accesibilidad para automatizar la captura del pasaje -->
-        <service
-            android:name=".BipAccessibilityService"
-            android:exported="true"
-            android:label="@string/accessibility_service_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
         </service>
 
     </application>
