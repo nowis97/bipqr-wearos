@@ -1,9 +1,12 @@
 package com.nowis.bipwear
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Path
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -46,11 +49,13 @@ class BipAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var attemptsCount = 0
     private var wakeLock: PowerManager.WakeLock? = null
+    private var hasClickedPagar = false
+    private var hasClickedGenerar = false
 
     private val timeoutRunnable = Runnable {
         if (isCapturing.get()) {
             Log.w(TAG, "Tiempo agotado para capturar el pasaje")
-            finishCapture(null, "Tiempo de espera agotado. Abre Red Movilidad manualmente en tu teléfono.")
+            finishCapture(null, "Tiempo de espera agotado. Abre Red Movilidad y toca 'Pagar' -> 'Generar pasaje'.")
         }
     }
 
@@ -76,13 +81,10 @@ class BipAccessibilityService : AccessibilityService() {
         val packageName = event.packageName?.toString() ?: return
 
         if (packageName == TARGET_PACKAGE) {
-            Log.d(TAG, "Evento de accesibilidad recibido de $TARGET_PACKAGE: ${event.eventType}")
+            Log.d(TAG, "Evento de accesibilidad en $TARGET_PACKAGE: ${event.eventType}")
 
-            // 1. Intentar interactuar con botones si están presentes
-            tryClickGenerateButton(rootInActiveWindow)
-
-            // 2. Programar captura de pantalla
-            scheduleScreenshotCheck()
+            // Intentar avanzar en el flujo de navegación (Pagar -> Generar pasaje)
+            tryNavigateAndGenerate(rootInActiveWindow)
         }
     }
 
@@ -99,10 +101,12 @@ class BipAccessibilityService : AccessibilityService() {
         successCallback = onSuccess
         errorCallback = onError
         attemptsCount = 0
+        hasClickedPagar = false
+        hasClickedGenerar = false
 
         acquireWakeLock()
 
-        // Iniciar Red Movilidad
+        // 1. Iniciar Red Movilidad
         val launchIntent = packageManager.getLaunchIntentForPackage(TARGET_PACKAGE)
         if (launchIntent != null) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -113,11 +117,11 @@ class BipAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Timeout máximo de 20 segundos
+        // Timeout máximo de 25 segundos
         handler.removeCallbacks(timeoutRunnable)
-        handler.postDelayed(timeoutRunnable, 20000L)
+        handler.postDelayed(timeoutRunnable, 25000L)
 
-        // Primer chequeo a los 1.5 segundos (tiempo para que cargue la UI)
+        // Primer chequeo a los 1.5 segundos
         handler.postDelayed({ scheduleScreenshotCheck() }, 1500L)
     }
 
@@ -129,8 +133,8 @@ class BipAccessibilityService : AccessibilityService() {
         }
 
         attemptsCount++
-        if (attemptsCount > 25) {
-            // Máximo de intentos alcanzado
+        if (attemptsCount > 35) {
+            finishCapture(null, "No se detectó el código QR en pantalla. Verifica si Red Movilidad solicita PIN o inicio de sesión.")
             return
         }
 
@@ -149,9 +153,8 @@ class BipAccessibilityService : AccessibilityService() {
 
             override fun onFailure(errorCode: Int) {
                 Log.w(TAG, "takeScreenshot falló con código $errorCode (intento #$attemptsCount)")
-                // Reintentar en 600ms si seguimos capturando
                 if (isCapturing.get()) {
-                    handler.postDelayed({ scheduleScreenshotCheck() }, 600L)
+                    handler.postDelayed({ scheduleScreenshotCheck() }, 400L)
                 }
             }
         })
@@ -160,47 +163,141 @@ class BipAccessibilityService : AccessibilityService() {
     private fun processScreenshot(bitmap: Bitmap) {
         if (!isCapturing.get()) return
 
-        try {
-            val ticketBitmap = AztecTicketProcessor.extractTicketBitmap(bitmap)
+        // 1. Intentar decodificar código Aztec real
+        val ticketBitmap = AztecTicketProcessor.extractTicketBitmap(bitmap)
+        if (ticketBitmap != null) {
             val ticketBytes = AztecTicketProcessor.toByteArray(ticketBitmap)
-
-            Log.i(TAG, "¡Pasaje extraído exitosamente! Tamaño: ${ticketBytes.size} bytes")
+            Log.i(TAG, "¡Pasaje Aztec extraído exitosamente! Tamaño: ${ticketBytes.size} bytes")
             finishCapture(ticketBytes, null)
 
-            // Volver al Home para no dejar la pantalla encendida en Red Movilidad
+            // Volver a Home después de capturar
             handler.postDelayed({
                 performGlobalAction(GLOBAL_ACTION_HOME)
-            }, 800L)
+            }, 600L)
+            return
+        }
 
-        } catch (e: Exception) {
-            Log.d(TAG, "Boleto aún no visible en pantalla, reintentando...")
-            if (isCapturing.get()) {
-                handler.postDelayed({ scheduleScreenshotCheck() }, 700L)
+        // 2. Si aún no hay código Aztec, intentar avanzar en la interfaz de Red Movilidad
+        Log.d(TAG, "Código aún no presente en pantalla (intento #$attemptsCount). Navegando...")
+        val root = rootInActiveWindow
+        tryNavigateAndGenerate(root)
+
+        // Si después de varios intentos no logramos hacer click por texto, intentar toque gestual en barra inferior ("Pagar")
+        if (attemptsCount == 4 && !hasClickedPagar) {
+            tapBottomBarPagar(bitmap.width, bitmap.height)
+        } else if (attemptsCount == 8 && !hasClickedGenerar) {
+            tapCenterGenerar(bitmap.width, bitmap.height)
+        }
+
+        // Programar siguiente escaneo
+        if (isCapturing.get()) {
+            handler.postDelayed({ scheduleScreenshotCheck() }, 400L)
+        }
+    }
+
+    /**
+     * Busca y presiona automáticamente los botones en orden de prioridad:
+     * 1° "Generar pasaje"
+     * 2° "Pagar" / "bip!QR"
+     */
+    private fun tryNavigateAndGenerate(root: AccessibilityNodeInfo?) {
+        if (root == null) return
+
+        // Prioridad 1: Si ya estamos en la pantalla de pago, buscar "Generar pasaje"
+        if (findAndClickKeyword(root, listOf("generar pasaje", "generar", "pagar pasaje"))) {
+            Log.i(TAG, "Clic exitoso en botón Generar pasaje")
+            hasClickedGenerar = true
+            return
+        }
+
+        // Prioridad 2: Si estamos en el mapa u otra pestaña, buscar la pestaña "Pagar" / "bip!QR"
+        if (!hasClickedPagar) {
+            if (findAndClickKeyword(root, listOf("pagar", "bip!qr", "bip qr", "centro bip"))) {
+                Log.i(TAG, "Clic exitoso en pestaña Pagar / bip!QR")
+                hasClickedPagar = true
+                return
             }
         }
     }
 
-    private fun tryClickGenerateButton(node: AccessibilityNodeInfo?) {
-        if (node == null) return
+    private fun findAndClickKeyword(node: AccessibilityNodeInfo?, keywords: List<String>): Boolean {
+        if (node == null) return false
 
         try {
-            val text = node.text?.toString()?.lowercase() ?: ""
-            val desc = node.contentDescription?.toString()?.lowercase() ?: ""
+            val text = node.text?.toString()?.lowercase()?.trim() ?: ""
+            val desc = node.contentDescription?.toString()?.lowercase()?.trim() ?: ""
 
-            if (text.contains("generar") || text.contains("pasaje") || text.contains("bip!qr") ||
-                desc.contains("generar") || desc.contains("pasaje") || desc.contains("bip!qr")) {
-                if (node.isClickable) {
-                    Log.i(TAG, "Haciendo clic automático en botón: ${node.text ?: node.contentDescription}")
-                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    return
+            for (kw in keywords) {
+                if (text == kw || text.contains(kw) || desc == kw || desc.contains(kw)) {
+                    if (clickNodeOrParent(node)) {
+                        return true
+                    }
                 }
             }
 
             for (i in 0 until node.childCount) {
-                tryClickGenerateButton(node.getChild(i))
+                if (findAndClickKeyword(node.getChild(i), keywords)) {
+                    return true
+                }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error explorando nodo de accesibilidad", e)
+            Log.w(TAG, "Error explorando árbol de nodos", e)
+        }
+        return false
+    }
+
+    private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
+        var current: AccessibilityNodeInfo? = node
+        while (current != null) {
+            if (current.isClickable) {
+                Log.i(TAG, "Ejecutando ACTION_CLICK en nodo: [${current.text ?: current.contentDescription}]")
+                return current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            current = current.parent
+        }
+
+        // Si no está marcado como clickable (típico en algunos widgets Flutter), despachar toque en sus coordenadas
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        if (rect.width() > 0 && rect.height() > 0) {
+            Log.i(TAG, "Despachando toque gestual en coordenadas: (${rect.centerX()}, ${rect.centerY()})")
+            dispatchTap(rect.centerX().toFloat(), rect.centerY().toFloat())
+            return true
+        }
+
+        return false
+    }
+
+    /**
+     * Toca la posición típica del botón "Pagar" en la barra inferior de Red Movilidad
+     * (centro de la pantalla, borde inferior).
+     */
+    private fun tapBottomBarPagar(screenWidth: Int, screenHeight: Int) {
+        val tapX = screenWidth * 0.50f
+        val tapY = screenHeight * 0.94f
+        Log.i(TAG, "Simulando toque en barra inferior Pagar: ($tapX, $tapY)")
+        dispatchTap(tapX, tapY)
+        hasClickedPagar = true
+    }
+
+    /**
+     * Toca la posición típica del botón grande "Generar pasaje" en la pantalla de bip!QR.
+     */
+    private fun tapCenterGenerar(screenWidth: Int, screenHeight: Int) {
+        val tapX = screenWidth * 0.50f
+        val tapY = screenHeight * 0.60f
+        Log.i(TAG, "Simulando toque en área central Generar pasaje: ($tapX, $tapY)")
+        dispatchTap(tapX, tapY)
+        hasClickedGenerar = true
+    }
+
+    private fun dispatchTap(x: Float, y: Float) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val path = Path().apply { moveTo(x, y) }
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+                .build()
+            dispatchGesture(gesture, null, null)
         }
     }
 
@@ -227,7 +324,7 @@ class BipAccessibilityService : AccessibilityService() {
                     "bipwear:capture_wakelock"
                 )
             }
-            wakeLock?.acquire(30000L) // 30 segundos
+            wakeLock?.acquire(30000L)
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo adquirir WakeLock", e)
         }

@@ -164,6 +164,15 @@
                 android:textColor="@color/text_primary" />
 
             <Button
+                android:id="@+id/btnCaptureRealTicket"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/red_primary"
+                android:text="Generar y Enviar Pasaje Real al Reloj"
+                android:textColor="@color/text_primary" />
+
+            <Button
                 android:id="@+id/btnSendTestQr"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

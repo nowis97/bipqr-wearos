@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnRefreshWatch: Button
 
     private lateinit var btnOpenRedApp: Button
+    private lateinit var btnCaptureRealTicket: Button
     private lateinit var btnSendTestQr: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity() {
         btnRefreshWatch = findViewById(R.id.btnRefreshWatch)
 
         btnOpenRedApp = findViewById(R.id.btnOpenRedApp)
+        btnCaptureRealTicket = findViewById(R.id.btnCaptureRealTicket)
         btnSendTestQr = findViewById(R.id.btnSendTestQr)
     }
 
@@ -80,6 +82,37 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "Red Movilidad no está instalada.", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        btnCaptureRealTicket.setOnClickListener {
+            if (!BipAccessibilityService.isRunning()) {
+                Toast.makeText(this, "Por favor activa primero el servicio de accesibilidad arriba.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            Toast.makeText(this, "Iniciando generación en Red Movilidad...", Toast.LENGTH_SHORT).show()
+            BipAccessibilityService.triggerTicketCapture(
+                context = this,
+                onSuccess = { ticketBytes ->
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try {
+                            val nodes = Wearable.getNodeClient(this@MainActivity).connectedNodes.await()
+                            val messageClient = Wearable.getMessageClient(this@MainActivity)
+                            for (node in nodes) {
+                                messageClient.sendMessage(node.id, "/bip/ticket_data", ticketBytes).await()
+                                messageClient.sendMessage(node.id, "/qrDataSync", ticketBytes).await()
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, "¡Pasaje real enviado al smartwatch!", Toast.LENGTH_LONG).show()
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error enviando pasaje", e)
+                        }
+                    }
+                },
+                onError = { error ->
+                    Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                }
+            )
         }
 
         btnSendTestQr.setOnClickListener {

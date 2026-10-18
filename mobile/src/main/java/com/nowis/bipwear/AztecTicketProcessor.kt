@@ -9,6 +9,7 @@ import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.aztec.AztecWriter
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import java.io.ByteArrayOutputStream
 import java.util.EnumMap
@@ -19,78 +20,87 @@ object AztecTicketProcessor {
     private const val OUTPUT_AZTEC_SIZE = 340 // Pixeles óptimos para pantallas Wear OS
 
     /**
-     * Intenta decodificar el código Aztec del screenshot. Si tiene éxito, regenera
-     * una imagen perfecta, nítida y de alto contraste lista para los validadores del metro/bus.
-     * Si falla la decodificación, recorta el área central como alternativa.
+     * Intenta decodificar el código Aztec del screenshot.
+     * Retorna el Bitmap limpio SI Y SÓLO SI se detecta un código válido (Aztec o QR).
+     * Retorna null si la pantalla aún muestra el mapa, cargando o cualquier otra vista.
      */
-    fun extractTicketBitmap(screenshot: Bitmap): Bitmap {
-        try {
-            val decodedData = decodeAztecFromBitmap(screenshot)
-            if (decodedData != null) {
-                Log.d(TAG, "Código Aztec decodificado con éxito. Contenido: ${decodedData.take(20)}...")
-                val regenerated = generateCleanAztecBitmap(decodedData, OUTPUT_AZTEC_SIZE)
-                if (regenerated != null) {
-                    return regenerated
-                }
+    fun extractTicketBitmap(screenshot: Bitmap): Bitmap? {
+        val decodedData = decodeBarcodeFromBitmap(screenshot)
+        if (decodedData != null) {
+            Log.i(TAG, "¡Código Aztec decodificado con éxito! (${decodedData.take(25)}...)")
+            val regenerated = generateCleanAztecBitmap(decodedData, OUTPUT_AZTEC_SIZE)
+            if (regenerated != null) {
+                return regenerated
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Fallo al procesar Aztec mediante ZXing: ${e.message}")
         }
-
-        // Fallback: Recorta el centro de la pantalla donde se sitúa el código bip!QR
-        Log.i(TAG, "Usando recorte óptico central como fallback")
-        return cropCenterSquare(screenshot)
+        return null
     }
 
-    private fun decodeAztecFromBitmap(bitmap: Bitmap): String? {
+    private fun decodeBarcodeFromBitmap(bitmap: Bitmap): String? {
+        val hints = EnumMap<DecodeHintType, Any>(DecodeHintType::class.java).apply {
+            put(DecodeHintType.POSSIBLE_FORMATS, listOf(BarcodeFormat.AZTEC, BarcodeFormat.QR_CODE))
+            put(DecodeHintType.TRY_HARDER, java.lang.Boolean.TRUE)
+        }
+
+        // 1. Intento: Tercio central (donde se ubica la tarjeta bip!QR con el código de barras)
+        try {
+            val cropW = (bitmap.width * 0.88).toInt()
+            val cropH = (bitmap.height * 0.58).toInt()
+            val startX = (bitmap.width - cropW) / 2
+            val startY = (bitmap.height * 0.20).toInt().coerceAtMost(bitmap.height - cropH)
+
+            val cropped = Bitmap.createBitmap(bitmap, startX, startY, cropW, cropH)
+            val result = tryDecodeWithVariousBinarizers(cropped, hints)
+            if (result != null) return result
+        } catch (e: Exception) {
+            Log.w(TAG, "Error escaneando área central: ${e.message}")
+        }
+
+        // 2. Intento: Cuadrado centrado exacto
+        try {
+            val size = (bitmap.width * 0.75).toInt()
+            val x = (bitmap.width - size) / 2
+            val y = (bitmap.height - size) / 2
+            val square = Bitmap.createBitmap(bitmap, x, y, size, size)
+            val result = tryDecodeWithVariousBinarizers(square, hints)
+            if (result != null) return result
+        } catch (_: Exception) {}
+
+        // 3. Intento: Pantalla completa
+        return tryDecodeWithVariousBinarizers(bitmap, hints)
+    }
+
+    private fun tryDecodeWithVariousBinarizers(bitmap: Bitmap, hints: Map<DecodeHintType, Any>): String? {
         val width = bitmap.width
         val height = bitmap.height
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
         val source = RGBLuminanceSource(width, height, pixels)
-        val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
 
-        val hints = EnumMap<DecodeHintType, Any>(DecodeHintType::class.java).apply {
-            put(DecodeHintType.POSSIBLE_FORMATS, listOf(BarcodeFormat.AZTEC, BarcodeFormat.QR_CODE))
-            put(DecodeHintType.TRY_HARDER, java.lang.Boolean.TRUE)
-        }
+        // Intento A: HybridBinarizer estándar (óptimo para capturas nítidas)
+        try {
+            val binaryBmp = BinaryBitmap(HybridBinarizer(source))
+            val result = MultiFormatReader().decode(binaryBmp, hints)
+            if (result != null && result.text.isNotEmpty()) return result.text
+        } catch (_: Exception) {}
 
-        return try {
-            val reader = MultiFormatReader()
-            val result = reader.decode(binaryBitmap, hints)
-            result.text
-        } catch (e: Exception) {
-            // Reintentar sólo en la mitad central de la pantalla
-            tryCenterCropDecode(bitmap)
-        }
-    }
+        // Intento B: GlobalHistogramBinarizer (resistente a variaciones globales)
+        try {
+            val binaryBmp = BinaryBitmap(GlobalHistogramBinarizer(source))
+            val result = MultiFormatReader().decode(binaryBmp, hints)
+            if (result != null && result.text.isNotEmpty()) return result.text
+        } catch (_: Exception) {}
 
-    private fun tryCenterCropDecode(bitmap: Bitmap): String? {
-        val cropW = (bitmap.width * 0.85).toInt()
-        val cropH = (bitmap.height * 0.55).toInt()
-        val startX = (bitmap.width - cropW) / 2
-        val startY = (bitmap.height - cropH) / 2
+        // Intento C: Invertido (en caso de tema oscuro o fondo invertido)
+        try {
+            val invertedSource = source.invert()
+            val binaryBmp = BinaryBitmap(HybridBinarizer(invertedSource))
+            val result = MultiFormatReader().decode(binaryBmp, hints)
+            if (result != null && result.text.isNotEmpty()) return result.text
+        } catch (_: Exception) {}
 
-        val cropped = Bitmap.createBitmap(bitmap, startX, startY, cropW, cropH)
-        val pixels = IntArray(cropW * cropH)
-        cropped.getPixels(pixels, 0, cropW, 0, 0, cropW, cropH)
-
-        val source = RGBLuminanceSource(cropW, cropH, pixels)
-        val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
-
-        val hints = EnumMap<DecodeHintType, Any>(DecodeHintType::class.java).apply {
-            put(DecodeHintType.POSSIBLE_FORMATS, listOf(BarcodeFormat.AZTEC, BarcodeFormat.QR_CODE))
-            put(DecodeHintType.TRY_HARDER, java.lang.Boolean.TRUE)
-        }
-
-        return try {
-            val reader = MultiFormatReader()
-            val result = reader.decode(binaryBitmap, hints)
-            result.text
-        } catch (e: Exception) {
-            null
-        }
+        return null
     }
 
     /**
@@ -114,17 +124,6 @@ object AztecTicketProcessor {
             Log.e(TAG, "Error generando Bitmap Aztec limpio", e)
             null
         }
-    }
-
-    /**
-     * Recorta un cuadrado centrado de la pantalla.
-     */
-    private fun cropCenterSquare(bitmap: Bitmap): Bitmap {
-        val size = (bitmap.width * 0.75).toInt()
-        val x = (bitmap.width - size) / 2
-        val y = (bitmap.height - size) / 2
-        val cropped = Bitmap.createBitmap(bitmap, x, y, size, size)
-        return Bitmap.createScaledBitmap(cropped, OUTPUT_AZTEC_SIZE, OUTPUT_AZTEC_SIZE, true)
     }
 
     /**
