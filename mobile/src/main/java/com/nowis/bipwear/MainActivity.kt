@@ -3,7 +3,10 @@ package com.nowis.bipwear
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
+import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -193,6 +196,8 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            isFocusable = true
+            isFocusableInTouchMode = true
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -208,10 +213,21 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
+                    view?.requestFocus(View.FOCUS_DOWN)
                     if (url != null && (url.contains("/claveunica/done") || url.contains("code=") || url.startsWith(startInfo.redirectUri))) {
                         checkLoginStateNow()
                     }
                 }
+            }
+            setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP -> {
+                        if (!v.hasFocus()) {
+                            v.requestFocus()
+                        }
+                    }
+                }
+                false
             }
             loadUrl(startInfo.authUrl)
         }
@@ -232,6 +248,16 @@ class MainActivity : AppCompatActivity() {
 
         dialogRef = dialog
         dialog.show()
+
+        // Permite explícitamente que el teclado en pantalla (IME) aparezca al tocar campos de texto en el WebView
+        dialog.window?.apply {
+            clearFlags(
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+            )
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        webView.requestFocus(View.FOCUS_DOWN)
 
         pollingJob = lifecycleScope.launch(Dispatchers.IO) {
             while (isActive && !completed) {
