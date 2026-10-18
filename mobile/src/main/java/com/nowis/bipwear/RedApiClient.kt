@@ -115,13 +115,23 @@ object RedApiClient {
     }
 
     fun startClaveUnica(context: Context): ClaveUnicaStartInfo {
-        val cfg = BipC2dEngine.loadConfig(context)
+        var cfg = BipC2dEngine.loadConfig(context)
+        if (cfg.phoneId.length < 32) {
+            val newUuid = java.util.UUID.randomUUID().toString().lowercase(java.util.Locale.US)
+            cfg = cfg.copy(phoneId = newUuid, uuid = newUuid)
+            BipC2dEngine.saveConfig(context, cfg)
+        }
+
         val resp = requestWithFallback(
             cfg = cfg,
             method = "POST",
             endpointPath = "/claveunica/start",
             formParams = mapOf("phoneId" to cfg.phoneId)
         )
+
+        val status = resp.optInt("status", 200)
+        val msg = resp.optString("message", resp.optString("mensaje", "Respuesta inválida de ClaveÚnica"))
+        require(status == 200) { "Error al iniciar ClaveÚnica: $msg" }
 
         val root = resp.optJSONObject("data") ?: resp
         val clientId = root.optString("clientId", "")
@@ -131,8 +141,7 @@ object RedApiClient {
         val sessionToken = root.optString("sessionToken", "")
 
         require(clientId.isNotEmpty() && sessionToken.isNotEmpty()) {
-            val msg = resp.optString("message", resp.optString("mensaje", "Respuesta inválida de ClaveÚnica"))
-            "Error al iniciar ClaveÚnica: $msg"
+            "Datos incompletos de ClaveÚnica: $msg"
         }
 
         val authUrl = "https://accounts.claveunica.gob.cl/openid/authorize?" + encodeForm(
@@ -171,11 +180,11 @@ object RedApiClient {
             return null
         }
 
-        val names = root.optString("names", "Usuario").trim()
-        val lastNames = root.optString("lastNames", "Red").trim()
-        val email = root.optString("email", "").trim()
+        val names = root.optString("names", root.optString("name", "Usuario")).trim()
+        val lastNames = root.optString("lastNames", root.optString("lastName", root.optString("apellidos", "Red"))).trim()
+        val email = root.optString("email", root.optString("mail", "")).trim()
         val nickname = root.optString("nickname", names.split(" ").firstOrNull() ?: "Usuario").trim()
-        val phone = root.optString("phoneNumber", "").trim()
+        val phone = root.optString("phoneNumber", root.optString("phone", root.optString("numeroCelular", ""))).trim()
 
         return ClaveUnicaUserProfile(
             rut = rut,

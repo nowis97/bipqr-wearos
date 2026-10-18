@@ -143,27 +143,28 @@ object BipC2dEngine {
             StandaloneConfig()
         }
 
-        if (existing.uuid.isNotEmpty() && existing.phoneId.isNotEmpty()) {
-            return existing
-        }
-
-        val androidId = try {
-            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-        } catch (_: Exception) {
-            null
-        }
-        val cleanId = if (!androidId.isNullOrBlank() && androidId.length >= 8) {
-            androidId.lowercase(Locale.US).take(16)
+        val cleanUuid = if (existing.uuid.length >= 32) {
+            existing.uuid
         } else {
-            UUID.randomUUID().toString().replace("-", "").lowercase(Locale.US).take(16)
+            UUID.randomUUID().toString().lowercase(Locale.US)
         }
 
-        val initialized = existing.copy(
-            uuid = existing.uuid.ifEmpty { cleanId },
-            phoneId = existing.phoneId.ifEmpty { cleanId }
-        )
-        saveConfig(context, initialized)
-        return initialized
+        val cleanPhoneId = if (existing.phoneId.length >= 32) {
+            existing.phoneId
+        } else {
+            cleanUuid
+        }
+
+        if (existing.uuid != cleanUuid || existing.phoneId != cleanPhoneId) {
+            val migrated = existing.copy(
+                uuid = cleanUuid,
+                phoneId = cleanPhoneId
+            )
+            saveConfig(context, migrated)
+            return migrated
+        }
+
+        return existing
     }
 
     fun saveConfig(context: Context, config: StandaloneConfig) {

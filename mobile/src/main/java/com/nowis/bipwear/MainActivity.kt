@@ -159,12 +159,33 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun showClaveUnicaWebViewDialog(startInfo: ClaveUnicaStartInfo) {
         pollingJob?.cancel()
+        var completed = false
 
         val container = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 (resources.displayMetrics.heightPixels * 0.78).toInt()
             )
+        }
+
+        var dialogRef: AlertDialog? = null
+
+        fun checkLoginStateNow() {
+            if (completed) return
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val profile = RedApiClient.checkClaveUnicaLogged(this@MainActivity, startInfo.sessionToken)
+                    if (profile != null && !completed) {
+                        completed = true
+                        withContext(Dispatchers.Main) {
+                            dialogRef?.dismiss()
+                            completeAccountProvisioning(startInfo.sessionToken, profile)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Verificando login ClaveÚnica: ${e.message}")
+                }
+            }
         }
 
         val webView = WebView(this).apply {
@@ -174,10 +195,22 @@ class MainActivity : AppCompatActivity() {
             )
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
             CookieManager.getInstance().setAcceptCookie(true)
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    val url = request?.url?.toString() ?: ""
+                    if (url.contains("/claveunica/done") || url.contains("code=") || url.startsWith(startInfo.redirectUri)) {
+                        checkLoginStateNow()
+                    }
                     return false
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (url != null && (url.contains("/claveunica/done") || url.contains("code=") || url.startsWith(startInfo.redirectUri))) {
+                        checkLoginStateNow()
+                    }
                 }
             }
             loadUrl(startInfo.authUrl)
@@ -197,14 +230,16 @@ class MainActivity : AppCompatActivity() {
             }
             .create()
 
+        dialogRef = dialog
         dialog.show()
 
         pollingJob = lifecycleScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                delay(2200)
+            while (isActive && !completed) {
+                delay(2000)
                 try {
                     val profile = RedApiClient.checkClaveUnicaLogged(this@MainActivity, startInfo.sessionToken)
-                    if (profile != null) {
+                    if (profile != null && !completed) {
+                        completed = true
                         withContext(Dispatchers.Main) {
                             dialog.dismiss()
                             completeAccountProvisioning(startInfo.sessionToken, profile)
