@@ -414,7 +414,7 @@ fun BipWearApp(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun IdleScreen(
-    cfg: BipUserConfig,
+    cfg: StandaloneConfig,
     onGenerate: () -> Unit,
     onRelink: () -> Unit
 ) {

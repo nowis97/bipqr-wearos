@@ -38,7 +38,13 @@ jobs:
       - name: Prepare APK output
         run: |
           mkdir -p dist
-          cp wear/build/outputs/apk/debug/wear-debug.apk dist/bipqr-watch.apk
+          APK_PATH=$(find wear/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: No APK generated in wear/build/outputs/apk"
+            exit 1
+          fi
+          echo "Found APK at $APK_PATH, copying to dist/bipqr-watch.apk"
+          cp "$APK_PATH" dist/bipqr-watch.apk
           echo "Generated APK:"
           ls -lh dist/
 
