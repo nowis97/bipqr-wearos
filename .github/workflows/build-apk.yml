@@ -1,4 +1,4 @@
-name: Build and Release APKs
+name: Build and Release Watch APK
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build APKs (Wear OS & Mobile)
+    name: Build Wear OS APK
     runs-on: ubuntu-latest
 
     steps:
@@ -32,15 +32,14 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APKs
-        run: ./gradlew :wear:assembleDebug :mobile:assembleDebug --stacktrace
+      - name: Build Wear OS Debug APK
+        run: ./gradlew :wear:assembleDebug --stacktrace
 
-      - name: Prepare APK outputs
+      - name: Prepare APK output
         run: |
           mkdir -p dist
           cp wear/build/outputs/apk/debug/wear-debug.apk dist/bipqr-watch.apk
-          cp mobile/build/outputs/apk/debug/mobile-debug.apk dist/bipqr-mobile.apk
-          echo "Generated APKs:"
+          echo "Generated APK:"
           ls -lh dist/
 
       - name: Upload Watch APK (Wear OS)
@@ -50,18 +49,9 @@ jobs:
           path: dist/bipqr-watch.apk
           retention-days: 30
 
-      - name: Upload Mobile APK (Android Phone)
-        uses: actions/upload-artifact@v4
-        with:
-          name: bipqr-mobile-apk
-          path: dist/bipqr-mobile.apk
-          retention-days: 30
-
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/bipqr-watch.apk
-            dist/bipqr-mobile.apk
+          files: dist/bipqr-watch.apk
           generate_release_notes: true
