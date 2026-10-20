@@ -2,6 +2,7 @@
 
 [![Build and Release Watch APK](https://github.com/nowis97/bipqr-wearos/actions/workflows/build-apk.yml/badge.svg)](https://github.com/nowis97/bipqr-wearos/actions/workflows/build-apk.yml)
 ![Wear OS](https://img.shields.io/badge/Platform-Wear%20OS%20(API%2026%2B)-blue?logo=wearos)
+![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20Wear-green?logo=jetpackcompose)
 ![Architecture](https://img.shields.io/badge/Architecture-100%25%20Standalone-success)
 ![Cryptography](https://img.shields.io/badge/Crypto-ECDSA%20secp224r1%20%7C%20SHA224-orange)
 
@@ -111,13 +112,12 @@ Para instalar el archivo `bipqr-watch.apk` en tu smartwatch:
 wear/src/main/
 ├── AndroidManifest.xml          # Configuración Wear OS (standalone=true)
 ├── java/com/nowis/bipwear/
-│   ├── MainActivity.kt          # UI circular, manejo de pantalla y brillo
+│   ├── MainActivity.kt          # UI reactiva con Jetpack Compose for Wear OS
 │   ├── BipC2dEngine.kt          # Motor criptográfico ECDSA y generador Aztec
 │   ├── RedApiClient.kt          # Cliente HTTP Red Movilidad y ClaveÚnica
 │   ├── TicketManager.kt         # Gestión de estados del pasaje y caché
 │   └── BipWearListenerService.kt# Receptor en segundo plano Wearable
 └── res/
-    ├── layout/activity_main.xml # Layout optimizado para pantallas redondas
     └── values/strings.xml       # Textos y estados de la interfaz
 ```
 

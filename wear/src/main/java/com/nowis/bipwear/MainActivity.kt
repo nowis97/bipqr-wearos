@@ -3,19 +3,50 @@ package com.nowis.bipwear
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.CountDownTimer
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import android.view.View
 import android.view.WindowManager
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import androidx.wear.compose.material.CircularProgressIndicator
+import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Scaffold
+import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.TimeText
 import androidx.wear.remote.interactions.RemoteActivityHelper
 import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataEvent
@@ -44,52 +75,27 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         const val PATH_TICKET_ERROR = "/bip/ticket_error"
     }
 
-    private lateinit var layoutIdle: LinearLayout
-    private lateinit var layoutLoading: LinearLayout
-    private lateinit var layoutTicket: LinearLayout
-
-    private lateinit var btnGenerate: Button
-    private lateinit var txtIdleSubtitle: TextView
-    private lateinit var txtLoading: TextView
-    private lateinit var imgQrCode: ImageView
-    private lateinit var txtTimer: TextView
-    private lateinit var txtInstructions: TextView
-
-    private var countDownTimer: CountDownTimer? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var isTicketVisible = false
-
-    // Refreshes the Aztec C2D dynamic signature every 5 seconds (tiempoRefrescoC2D)
-    private val c2dRefreshRunnable = object : Runnable {
-        override fun run() {
-            if (!isTicketVisible) return
-            try {
-                if (BipC2dEngine.isTramaValid(this@MainActivity)) {
-                    val refreshed = BipC2dEngine.generateOfflineTicket(this@MainActivity)
-                    imgQrCode.setImageBitmap(refreshed.bitmap)
-                    val intervalMs = (refreshed.refreshIntervalSec * 1000L).coerceAtLeast(3000L)
-                    mainHandler.postDelayed(this, intervalMs)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Error en auto-refresco C2D: ${e.message}")
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        initViews()
         observeTicketState()
         syncStoredDataItems()
+
+        setContent {
+            MaterialTheme {
+                BipWearApp(
+                    activity = this,
+                    onGenerateTicket = { generarPasajeStandalone() },
+                    onStartClaveUnica = { startClaveUnicaRemoteFlow() }
+                )
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
         Wearable.getDataClient(this).addListener(this)
         Wearable.getMessageClient(this).addListener(this)
-        updateIdleSubtitle()
     }
 
     override fun onPause() {
@@ -98,60 +104,9 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         Wearable.getMessageClient(this).removeListener(this)
     }
 
-    private fun initViews() {
-        layoutIdle = findViewById(R.id.layoutIdle)
-        layoutLoading = findViewById(R.id.layoutLoading)
-        layoutTicket = findViewById(R.id.layoutTicket)
-
-        btnGenerate = findViewById(R.id.btnGenerate)
-        txtIdleSubtitle = findViewById(R.id.txtIdleSubtitle)
-        txtLoading = findViewById(R.id.txtLoading)
-        imgQrCode = findViewById(R.id.imgQrCode)
-        txtTimer = findViewById(R.id.txtTimer)
-        txtInstructions = findViewById(R.id.txtInstructions)
-
-        btnGenerate.setOnClickListener {
-            val cfg = BipC2dEngine.loadConfig(this)
-            if (cfg.isProvisioned) {
-                generarPasajeStandalone()
-            } else {
-                startClaveUnicaRemoteFlow()
-            }
-        }
-
-        btnGenerate.setOnLongClickListener {
-            val cfg = BipC2dEngine.loadConfig(this)
-            if (cfg.isProvisioned) {
-                Toast.makeText(this, "Re-vinculando ClaveÚnica...", Toast.LENGTH_SHORT).show()
-                startClaveUnicaRemoteFlow()
-                true
-            } else {
-                false
-            }
-        }
-
-        layoutTicket.setOnClickListener {
-            generarPasajeStandalone()
-        }
-
-        updateIdleSubtitle()
-    }
-
     private fun observeTicketState() {
         lifecycleScope.launch {
-            TicketManager.ticketState.collect { state ->
-                when (state) {
-                    is TicketState.Idle -> showIdleView()
-                    is TicketState.Loading -> showLoadingView(state.message)
-                    is TicketState.Active -> showTicketView(state.ticket)
-                    is TicketState.Error -> showErrorView(state.errorMessage)
-                }
-            }
-        }
-
-        lifecycleScope.launch {
             TicketManager.configVersion.collect {
-                updateIdleSubtitle()
                 // If we were waiting for a background seed refresh, immediately generate the ticket
                 if (TicketManager.ticketState.value is TicketState.Loading && BipC2dEngine.isTramaValid(this@MainActivity)) {
                     renderOfflineTicketNow()
@@ -182,19 +137,6 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
             } catch (e: Exception) {
                 Log.w(TAG, "No se pudo consultar DataItems iniciales: ${e.message}")
             }
-        }
-    }
-
-    private fun updateIdleSubtitle() {
-        val cfg = BipC2dEngine.loadConfig(this)
-        if (cfg.isProvisioned) {
-            btnGenerate.text = getString(R.string.btn_generate)
-            val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
-            val tramaStatus = if (BipC2dEngine.isTramaValid(this)) "Offline listo" else "Online 2h"
-            txtIdleSubtitle.text = "${cfg.rut} · $$clp\n($tramaStatus)"
-        } else {
-            btnGenerate.text = getString(R.string.btn_link_clave_unica)
-            txtIdleSubtitle.text = getString(R.string.status_not_provisioned)
         }
     }
 
@@ -278,7 +220,6 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                 RedApiClient.requestC2dSeed(this@MainActivity)
 
                 withContext(Dispatchers.Main) {
-                    updateIdleSubtitle()
                     Toast.makeText(this@MainActivity, "¡Cuenta activada con éxito!", Toast.LENGTH_SHORT).show()
                     // Genera de inmediato el primer pasaje offline
                     renderOfflineTicketNow()
@@ -293,8 +234,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
     }
 
     /**
-     * Generates the bip!QR Aztec ticket 100% locally on the watch using Sonda's libc2d algorithm.
-     * Never opens or wakes up the phone screen.
+     * Genera el pasaje Aztec bip!QR 100% en el reloj usando el algoritmo libc2d de Sonda.
      */
     private fun generarPasajeStandalone() {
         val cfg = BipC2dEngine.loadConfig(this)
@@ -303,13 +243,13 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
             return
         }
 
-        // Fast path: 2-hour C2D seed (`tramaSistemaCentral`) is already valid on the watch -> <50ms 100% offline!
+        // Fast path: semilla C2D de 2 horas válida -> <50ms 100% offline
         if (BipC2dEngine.isTramaValid(this)) {
             renderOfflineTicketNow()
             return
         }
 
-        // Slow path (once every 2 hours): renew `tramaSistemaCentral` directly from watch HTTP (or background phone API fallback)
+        // Slow path: renovación de semilla directa desde reloj o servicio silencioso
         TicketManager.setState(TicketState.Loading(getString(R.string.status_requesting)))
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -350,10 +290,6 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         }
     }
 
-    /**
-     * Fallback when the watch has no direct Wi-Fi/LTE/BT-proxy internet: asks the phone's
-     * background listener service to call `/payment/qr/account/generatec2d` silently (NO UI/screen).
-     */
     private suspend fun requestSilentBackgroundSeedRefresh(): Boolean {
         return try {
             val nodes = Wearable.getNodeClient(this).connectedNodes.await()
@@ -407,101 +343,282 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
             TicketManager.processPayload(applicationContext, data)
         }
     }
+}
 
-    private fun showIdleView() {
-        isTicketVisible = false
-        mainHandler.removeCallbacks(c2dRefreshRunnable)
-        resetScreenBrightness()
-        countDownTimer?.cancel()
+@Composable
+fun BipWearApp(
+    activity: ComponentActivity,
+    onGenerateTicket: () -> Unit,
+    onStartClaveUnica: () -> Unit
+) {
+    val context = LocalContext.current
+    val ticketState by TicketManager.ticketState.collectAsState()
+    val configVersion by TicketManager.configVersion.collectAsState()
+    val cfg = remember(configVersion) { BipC2dEngine.loadConfig(context) }
 
-        updateIdleSubtitle()
-        layoutIdle.visibility = View.VISIBLE
-        layoutLoading.visibility = View.GONE
-        layoutTicket.visibility = View.GONE
-    }
+    val isTicketActive = ticketState is TicketState.Active
 
-    private fun showLoadingView(message: String) {
-        isTicketVisible = false
-        mainHandler.removeCallbacks(c2dRefreshRunnable)
-        layoutIdle.visibility = View.GONE
-        layoutLoading.visibility = View.VISIBLE
-        layoutTicket.visibility = View.GONE
-        txtLoading.text = message
-    }
-
-    private fun showTicketView(ticket: TicketData) {
-        isTicketVisible = true
-        layoutIdle.visibility = View.GONE
-        layoutLoading.visibility = View.GONE
-        layoutTicket.visibility = View.VISIBLE
-
-        imgQrCode.setImageBitmap(ticket.bitmap)
-        maximizeScreenBrightness()
-
-        val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(ticket.saldo)
-        txtInstructions.text = if (ticket.saldo > 0) {
-            "Saldo: $$clp · Toca para actualizar"
-        } else {
-            getString(R.string.status_ticket_ready)
+    // Maximizar brillo y mantener pantalla encendida mientras el código Aztec está visible
+    DisposableEffect(isTicketActive) {
+        if (isTicketActive) {
+            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            val params = activity.window.attributes
+            params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+            activity.window.attributes = params
         }
+        onDispose {
+            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            val params = activity.window.attributes
+            params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            activity.window.attributes = params
+        }
+    }
 
-        // Schedule dynamic 5-second Aztec signature rotation
-        mainHandler.removeCallbacks(c2dRefreshRunnable)
-        val refreshMs = (ticket.refreshIntervalSec * 1000L).coerceAtLeast(3000L)
-        mainHandler.postDelayed(c2dRefreshRunnable, refreshMs)
-
-        countDownTimer?.cancel()
-        val remainingMs = (ticket.expiryTimestampMs - System.currentTimeMillis()).coerceAtLeast(10_000L)
-
-        countDownTimer = object : CountDownTimer(remainingMs, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                val totalSeconds = millisUntilFinished / 1000
-                val hours = totalSeconds / 3600
-                val minutes = (totalSeconds % 3600) / 60
-                val seconds = totalSeconds % 60
-                txtTimer.setTextColor(getColor(R.color.accent_green))
-                txtTimer.text = if (hours > 0) {
-                    String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-                } else {
-                    String.format(Locale.US, "%02d:%02d", minutes, seconds)
+    Scaffold(
+        timeText = { TimeText() }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            when (val state = ticketState) {
+                is TicketState.Idle -> {
+                    IdleScreen(
+                        cfg = cfg,
+                        onGenerate = onGenerateTicket,
+                        onRelink = onStartClaveUnica
+                    )
+                }
+                is TicketState.Loading -> {
+                    LoadingScreen(message = state.message)
+                }
+                is TicketState.Active -> {
+                    TicketScreen(
+                        ticket = state.ticket,
+                        onRefresh = onGenerateTicket
+                    )
+                }
+                is TicketState.Error -> {
+                    LaunchedEffect(state.errorMessage) {
+                        Toast.makeText(context, state.errorMessage, Toast.LENGTH_LONG).show()
+                        TicketManager.setState(TicketState.Idle)
+                    }
                 }
             }
+        }
+    }
+}
 
-            override fun onFinish() {
-                isTicketVisible = false
-                mainHandler.removeCallbacks(c2dRefreshRunnable)
-                txtTimer.text = getString(R.string.status_expired)
-                txtTimer.setTextColor(getColor(R.color.red_primary))
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun IdleScreen(
+    cfg: BipUserConfig,
+    onGenerate: () -> Unit,
+    onRelink: () -> Unit
+) {
+    val context = LocalContext.current
+    val isProvisioned = cfg.isProvisioned
+    val isOfflineReady = remember(cfg) { BipC2dEngine.isTramaValid(context) }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        Text(
+            text = "bip!QR",
+            color = Color(0xFFE50914),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        val subtitleText = if (isProvisioned) {
+            val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
+            val tramaStatus = if (isOfflineReady) "Offline listo" else "Online 2h"
+            "${cfg.rut} · $$clp\n($tramaStatus)"
+        } else {
+            stringResource(R.string.status_not_provisioned)
+        }
+
+        Text(
+            text = subtitleText,
+            color = Color(0xFFAAAAAA),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFFE50914))
+                .combinedClickable(
+                    onClick = {
+                        if (isProvisioned) onGenerate() else onRelink()
+                    },
+                    onLongClick = {
+                        if (isProvisioned) {
+                            Toast.makeText(context, "Re-vinculando ClaveÚnica...", Toast.LENGTH_SHORT).show()
+                            onRelink()
+                        }
+                    }
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (isProvisioned) stringResource(R.string.btn_generate) else stringResource(R.string.btn_link_clave_unica),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun LoadingScreen(message: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        CircularProgressIndicator(
+            indicatorColor = Color(0xFFE50914),
+            modifier = Modifier.size(36.dp),
+            strokeWidth = 3.dp
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = message,
+            color = Color.White,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 15.sp
+        )
+    }
+}
+
+@Composable
+fun TicketScreen(
+    ticket: TicketData,
+    onRefresh: () -> Unit
+) {
+    val context = LocalContext.current
+
+    // Auto-refresco de firma dinámica telemétrica cada 5 segundos
+    LaunchedEffect(ticket.expiryTimestampMs) {
+        while (isActive) {
+            val intervalMs = (ticket.refreshIntervalSec * 1000L).coerceAtLeast(3000L)
+            delay(intervalMs)
+            try {
+                if (BipC2dEngine.isTramaValid(context)) {
+                    val refreshed = BipC2dEngine.generateOfflineTicket(context)
+                    TicketManager.setState(
+                        TicketState.Active(
+                            TicketData(
+                                bitmap = refreshed.bitmap,
+                                expiryTimestampMs = refreshed.tramaExpiryEpochMs,
+                                refreshIntervalSec = refreshed.refreshIntervalSec,
+                                saldo = refreshed.saldo
+                            )
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w("BipMainActivity", "Error en auto-refresco C2D: ${e.message}")
             }
-        }.start()
+        }
     }
 
-    private fun showErrorView(message: String) {
-        isTicketVisible = false
-        mainHandler.removeCallbacks(c2dRefreshRunnable)
-        resetScreenBrightness()
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-        TicketManager.setState(TicketState.Idle)
+    // Contador regresivo
+    var remainingMs by remember(ticket.expiryTimestampMs) {
+        mutableStateOf((ticket.expiryTimestampMs - System.currentTimeMillis()).coerceAtLeast(0L))
     }
 
-    private fun maximizeScreenBrightness() {
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val params = window.attributes
-        params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
-        window.attributes = params
+    LaunchedEffect(ticket.expiryTimestampMs) {
+        while (isActive && remainingMs > 0) {
+            delay(1000)
+            remainingMs = (ticket.expiryTimestampMs - System.currentTimeMillis()).coerceAtLeast(0L)
+        }
     }
 
-    private fun resetScreenBrightness() {
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val params = window.attributes
-        params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        window.attributes = params
-    }
+    val isExpired = remainingMs <= 0
+    val totalSeconds = remainingMs / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
 
-    override fun onDestroy() {
-        super.onDestroy()
-        isTicketVisible = false
-        mainHandler.removeCallbacks(c2dRefreshRunnable)
-        countDownTimer?.cancel()
+    val timerText = if (isExpired) {
+        stringResource(R.string.status_expired)
+    } else if (hours > 0) {
+        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.US, "%02d:%02d", minutes, seconds)
+    }
+    val timerColor = if (isExpired) Color(0xFFE50914) else Color(0xFF00E676)
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable { onRefresh() }
+            .padding(bottom = 4.dp)
+    ) {
+        Text(
+            text = timerText,
+            color = timerColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(3.dp))
+
+        // Contenedor blanco de alto contraste para lectura óptica en torniquetes
+        Box(
+            modifier = Modifier
+                .size(130.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White)
+                .padding(3.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = ticket.bitmap.asImageBitmap(),
+                contentDescription = "bip!QR Ticket",
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(ticket.saldo)
+        val instructionsText = if (ticket.saldo > 0) {
+            "Saldo: $$clp · Toca para actualizar"
+        } else {
+            stringResource(R.string.status_ticket_ready)
+        }
+
+        Text(
+            text = instructionsText,
+            color = Color(0xFFAAAAAA),
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center
+        )
     }
 }

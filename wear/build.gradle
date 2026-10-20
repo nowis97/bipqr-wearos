@@ -36,7 +36,11 @@ android {
     }
 
     buildFeatures {
-        viewBinding true
+        compose true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8'
     }
 }
 
@@ -44,11 +48,16 @@ dependencies {
     // Google Play Services Wearable (comunicación con el teléfono)
     implementation 'com.google.android.gms:play-services-wearable:18.2.0'
 
-    // UI Wear OS y AndroidX
+    // Wear OS Jetpack Compose & Activity Compose
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'androidx.wear.compose:compose-material:1.3.0'
+    implementation 'androidx.wear.compose:compose-foundation:1.3.0'
+    implementation 'androidx.compose.ui:ui-tooling-preview:1.6.2'
+    debugImplementation 'androidx.compose.ui:ui-tooling:1.6.2'
+
+    // Wear OS y AndroidX base
     implementation 'androidx.wear:wear:1.3.0'
     implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
 
     // Corrutinas Kotlin + Task await
