@@ -1,5 +1,6 @@
 package com.nowis.bipwear
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -15,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.wear.remote.interactions.RemoteActivityHelper
 import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
@@ -23,6 +25,8 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -107,7 +111,23 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         txtInstructions = findViewById(R.id.txtInstructions)
 
         btnGenerate.setOnClickListener {
-            generarPasajeStandalone()
+            val cfg = BipC2dEngine.loadConfig(this)
+            if (cfg.isProvisioned) {
+                generarPasajeStandalone()
+            } else {
+                startClaveUnicaRemoteFlow()
+            }
+        }
+
+        btnGenerate.setOnLongClickListener {
+            val cfg = BipC2dEngine.loadConfig(this)
+            if (cfg.isProvisioned) {
+                Toast.makeText(this, "Re-vinculando ClaveÚnica...", Toast.LENGTH_SHORT).show()
+                startClaveUnicaRemoteFlow()
+                true
+            } else {
+                false
+            }
         }
 
         layoutTicket.setOnClickListener {
@@ -168,11 +188,107 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
     private fun updateIdleSubtitle() {
         val cfg = BipC2dEngine.loadConfig(this)
         if (cfg.isProvisioned) {
+            btnGenerate.text = getString(R.string.btn_generate)
             val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
             val tramaStatus = if (BipC2dEngine.isTramaValid(this)) "Offline listo" else "Online 2h"
             txtIdleSubtitle.text = "${cfg.rut} · $$clp\n($tramaStatus)"
         } else {
+            btnGenerate.text = getString(R.string.btn_link_clave_unica)
             txtIdleSubtitle.text = getString(R.string.status_not_provisioned)
+        }
+    }
+
+    /**
+     * Inicia el flujo de autenticación con ClaveÚnica abriendo el navegador oficial en el teléfono
+     * mediante RemoteActivityHelper nativo de Wear OS (sin necesidad de tener ninguna app instalada en el teléfono).
+     */
+    private fun startClaveUnicaRemoteFlow() {
+        TicketManager.setState(TicketState.Loading(getString(R.string.status_opening_phone)))
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Obtiene la URL de autenticación desde el backend de Red Movilidad
+                val startInfo = RedApiClient.startClaveUnica(this@MainActivity)
+
+                // 2. Lanza el intent en el navegador predeterminado del teléfono emparejado (Chrome, Samsung Internet, etc.)
+                val remoteIntent = Intent(Intent.ACTION_VIEW)
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+                    .setData(Uri.parse(startInfo.authUrl))
+
+                val remoteActivityHelper = RemoteActivityHelper(this@MainActivity)
+                val nodes = Wearable.getNodeClient(this@MainActivity).connectedNodes.await()
+                val phoneNode = nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull()
+
+                withContext(Dispatchers.Main) {
+                    TicketManager.setState(TicketState.Loading(getString(R.string.status_waiting_phone_login)))
+                }
+
+                try {
+                    if (phoneNode != null) {
+                        remoteActivityHelper.startRemoteActivity(remoteIntent, phoneNode.id)
+                    } else {
+                        remoteActivityHelper.startRemoteActivity(remoteIntent)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Fallo al enviar RemoteActivity al teléfono, intentando local", e)
+                    try {
+                        startActivity(remoteIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (_: Exception) {}
+                }
+
+                // 3. Monitorea en segundo plano hasta que el usuario termine el login en el navegador
+                var profile: ClaveUnicaUserProfile? = null
+                var attempts = 0
+                while (isActive && attempts < 90) { // Hasta 3 minutos de espera
+                    delay(2000)
+                    attempts++
+                    try {
+                        val p = RedApiClient.checkClaveUnicaLogged(this@MainActivity, startInfo.sessionToken)
+                        if (p != null) {
+                            profile = p
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Esperando login ClaveÚnica: ${e.message}")
+                    }
+                }
+
+                if (profile == null) {
+                    withContext(Dispatchers.Main) {
+                        TicketManager.setState(TicketState.Error("Tiempo de espera agotado. Intenta vincular de nuevo."))
+                    }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    TicketManager.setState(TicketState.Loading(getString(R.string.status_activating_keys)))
+                }
+
+                // 4. Inicia sesión en Red Movilidad con el perfil de ClaveÚnica
+                RedApiClient.signInWithClaveUnica(
+                    context = this@MainActivity,
+                    cuSessionToken = startInfo.sessionToken,
+                    profile = profile
+                )
+
+                // 5. Enrola o actualiza la llave criptográfica secp224r1 de Sonda libc2d
+                RedApiClient.enrollOrUpdateAccount(this@MainActivity)
+
+                // 6. Descarga la primera semilla C2D de 2 horas (tramaSistemaCentral + saldo)
+                RedApiClient.requestC2dSeed(this@MainActivity)
+
+                withContext(Dispatchers.Main) {
+                    updateIdleSubtitle()
+                    Toast.makeText(this@MainActivity, "¡Cuenta activada con éxito!", Toast.LENGTH_SHORT).show()
+                    // Genera de inmediato el primer pasaje offline
+                    renderOfflineTicketNow()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error en flujo ClaveÚnica en el reloj", e)
+                withContext(Dispatchers.Main) {
+                    TicketManager.setState(TicketState.Error("Error: ${e.localizedMessage}"))
+                }
+            }
         }
     }
 
@@ -183,11 +299,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
     private fun generarPasajeStandalone() {
         val cfg = BipC2dEngine.loadConfig(this)
         if (!cfg.isProvisioned) {
-            Toast.makeText(
-                this,
-                getString(R.string.status_not_provisioned),
-                Toast.LENGTH_LONG
-            ).show()
+            startClaveUnicaRemoteFlow()
             return
         }
 

@@ -55,6 +55,9 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
+    // RemoteActivityHelper para abrir ClaveÚnica en el navegador del teléfono sin app complementaria
+    implementation 'androidx.wear:wear-remote-interactions:1.0.0'
+
     // ZXing (generación local de código Aztec) y BouncyCastle (EC secp224r1 + SHA224withECDSA)
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'

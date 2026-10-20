@@ -2,13 +2,17 @@
 <resources>
     <string name="app_name">bip!QR Watch</string>
     <string name="btn_generate">Generar Pasaje</string>
+    <string name="btn_link_clave_unica">Vincular ClaveÚnica</string>
     <string name="btn_refresh">Actualizar</string>
     <string name="status_ready">Toca para generar pasaje</string>
-    <string name="status_not_provisioned">Vincula tu cuenta 1 sola vez desde BipWear en el teléfono</string>
+    <string name="status_not_provisioned">Toca abajo para vincular tu cuenta con ClaveÚnica</string>
+    <string name="status_opening_phone">Abriendo navegador en tu teléfono...</string>
+    <string name="status_waiting_phone_login">Inicia sesión en el navegador de tu teléfono...</string>
+    <string name="status_activating_keys">Activando llave bip!QR C2D en reloj...</string>
     <string name="status_requesting">Renovando semilla C2D...</string>
     <string name="status_generating">Firmando pasaje C2D en reloj...</string>
     <string name="status_ticket_ready">Acerca el reloj al validador</string>
-    <string name="status_no_phone">Sin conexión para renovar semilla (2h)</string>
+    <string name="status_no_phone">Sin conexión con el teléfono</string>
     <string name="status_expired">Pasaje expirado · Toca para renovar</string>
     <string name="status_error">Error al generar pasaje</string>
 </resources>
