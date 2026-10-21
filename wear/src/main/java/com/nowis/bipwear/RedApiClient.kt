@@ -432,9 +432,31 @@ object RedApiClient {
                 )
             )
 
+            val status = resp.optInt("status", resp.optInt("httpCode", 200))
+            if (status !in 200..299) {
+                val msg = resp.optString("message", resp.optString("mensaje", "Error HTTP $status"))
+                Log.w(TAG, "No se pudo actualizar Dale QR (status $status): $msg")
+                return cfg
+            }
+
             val dataObj = resp.optJSONObject("data") ?: resp
-            val acumulado = dataObj.optInt("accumulatedAmountToActivateBenefit", cfg.daleQrAcumulado)
-            val meta = dataObj.optInt("valueToActivateBenefit", if (cfg.daleQrMeta > 0) cfg.daleQrMeta else 42000)
+            val acumulado = parseNumericValue(
+                dataObj,
+                "accumulatedAmountToActivateBenefit",
+                "accumulatedAmount",
+                "montoAcumulado",
+                "ltUsosLimite",
+                "acumulado",
+                default = cfg.daleQrAcumulado
+            )
+            val meta = parseNumericValue(
+                dataObj,
+                "valueToActivateBenefit",
+                "meta",
+                "montoMeta",
+                "valorLimite",
+                default = if (cfg.daleQrMeta > 0) cfg.daleQrMeta else 42000
+            )
             val estado = dataObj.optString(
                 "estadoBeneficioLimiteTarifario",
                 dataObj.optString("status", cfg.daleQrEstado)
@@ -453,6 +475,17 @@ object RedApiClient {
             Log.w(TAG, "No se pudo actualizar beneficio Dale QR: ${e.message}")
             cfg
         }
+    }
+
+    private fun parseNumericValue(json: JSONObject, vararg keys: String, default: Int): Int {
+        for (key in keys) {
+            if (!json.has(key)) continue
+            val raw = json.opt(key) ?: continue
+            if (raw is Number) return raw.toInt()
+            val cleaned = raw.toString().replace("$", "").replace(".", "").replace(",", "").trim()
+            cleaned.toIntOrNull()?.let { return it }
+        }
+        return default
     }
 
     private fun parseServerUtcEpochMs(serverUtcStr: String): Long? {

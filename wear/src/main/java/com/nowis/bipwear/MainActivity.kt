@@ -109,7 +109,22 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                 Toast.makeText(this, "Actualizando Dale QR...", Toast.LENGTH_SHORT).show()
             }
             lifecycleScope.launch(Dispatchers.IO) {
-                RedApiClient.fetchDaleQrBenefitInfo(this@MainActivity)
+                try {
+                    val updated = RedApiClient.fetchDaleQrBenefitInfo(this@MainActivity)
+                    if (showToast) {
+                        withContext(Dispatchers.Main) {
+                            val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(updated.daleQrAcumulado)
+                            val metaClp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(updated.daleQrMeta)
+                            Toast.makeText(this@MainActivity, "Dale QR: $$clp / $$metaClp", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (showToast) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@MainActivity, "Error Dale QR: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             }
         }
     }
@@ -447,15 +462,29 @@ fun IdleScreen(
     ) {
         // Anillo circular nativo en el borde de la pantalla redonda
         if (isProvisioned) {
-            val progress = if (cfg.isDaleQrReached) 1f else cfg.daleQrProgress
+            val rawProgress = cfg.daleQrProgress
+            // Si hay progreso pero es pequeño (ej. 1 viaje de $830 = 1.9%),
+            // aseguramos al menos un 3.5% visual (~13 grados) para que sea inmediatamente perceptible.
+            val progress = when {
+                cfg.isDaleQrReached -> 1f
+                rawProgress > 0f -> rawProgress.coerceIn(0.035f, 1f)
+                else -> 0f
+            }
+
+            val ringColor = if (cfg.isDaleQrReached) Color(0xFF00E676) else Color(0xFF00E5FF)
+            // Track traslúcido con tinte para que la silueta del anillo sea claramente visible en pantallas OLED incluso con $0 acumulado
+            val ringTrackColor = if (cfg.isDaleQrReached) Color(0x3300E676) else Color(0x3300E5FF)
+
             CircularProgressIndicator(
                 progress = progress,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(3.dp),
-                indicatorColor = if (cfg.isDaleQrReached) Color(0xFF00E676) else Color(0xFF00E5FF),
-                trackColor = Color(0xFF222222),
-                strokeWidth = 3.5.dp
+                    .padding(5.dp),
+                startAngle = 270f,
+                endAngle = 270f,
+                indicatorColor = ringColor,
+                trackColor = ringTrackColor,
+                strokeWidth = 4.dp
             )
         }
 
