@@ -75,7 +75,8 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                     mainViewModel = mainViewModel,
                     movementsViewModel = movementsViewModel,
                     onGenerateTicket = { generarPasajeStandalone() },
-                    onStartClaveUnica = { startClaveUnicaRemoteFlow() }
+                    onStartClaveUnica = { startClaveUnicaRemoteFlow() },
+                    onAutoRefreshTriggered = { renderOfflineTicketNow() }
                 )
             }
         }
@@ -257,19 +258,24 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
     }
 
     fun renderOfflineTicketNow() {
-        try {
-            val result = BipC2dEngine.generateOfflineTicket(this)
-            mainViewModel.setTicketActive(
-                TicketData(
+        lifecycleScope.launch(Dispatchers.Default) {
+            try {
+                val result = BipC2dEngine.generateOfflineTicket(applicationContext)
+                val ticket = TicketData(
                     bitmap = result.bitmap,
                     expiryTimestampMs = result.tramaExpiryEpochMs,
                     refreshIntervalSec = result.refreshIntervalSec,
                     saldo = result.saldo
                 )
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error generando pasaje", e)
-            mainViewModel.setError("Error C2D: ${e.localizedMessage}")
+                withContext(Dispatchers.Main) {
+                    mainViewModel.setTicketActive(ticket)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error generando pasaje", e)
+                withContext(Dispatchers.Main) {
+                    mainViewModel.setError("Error C2D: ${e.localizedMessage}")
+                }
+            }
         }
     }
 
@@ -327,7 +333,8 @@ fun BipWearApp(
     mainViewModel: MainViewModel,
     movementsViewModel: MovementsViewModel,
     onGenerateTicket: () -> Unit,
-    onStartClaveUnica: () -> Unit
+    onStartClaveUnica: () -> Unit,
+    onAutoRefreshTriggered: () -> Unit
 ) {
     val context = LocalContext.current
     val ticketState by mainViewModel.uiState.collectAsState()
@@ -381,9 +388,7 @@ fun BipWearApp(
                     TicketScreen(
                         ticket = state.ticket,
                         onRefresh = onGenerateTicket,
-                        onAutoRefreshTriggered = {
-                            if (activity is MainActivity) activity.renderOfflineTicketNow()
-                        }
+                        onAutoRefreshTriggered = onAutoRefreshTriggered
                     )
                 }
                 is MainUiState.Movements -> {
