@@ -400,7 +400,59 @@ object RedApiClient {
             tiempoRefrescoSec = tiempoRefrescoSec
         )
         BipC2dEngine.saveConfig(context, updated)
-        return updated
+
+        // Actualiza silenciosamente los datos de Dale QR en segundo plano
+        try {
+            fetchDaleQrBenefitInfo(context)
+        } catch (_: Exception) {}
+
+        return BipC2dEngine.loadConfig(context)
+    }
+
+    /**
+     * Consulta el estado del beneficio "Dale QR" (Monto Máximo Mensual) desde Red Movilidad.
+     * Endpoint oficial: POST /phone/v13/payment/qr/account/fare-benefit-info
+     */
+    fun fetchDaleQrBenefitInfo(context: Context): StandaloneConfig {
+        val cfg = BipC2dEngine.loadConfig(context)
+        if (cfg.sessionToken.isEmpty() || cfg.userId.isEmpty() || cfg.phoneId.isEmpty()) {
+            return cfg
+        }
+
+        return try {
+            val resp = requestWithFallback(
+                cfg = cfg,
+                method = "POST",
+                endpointPath = "/payment/qr/account/fare-benefit-info",
+                formParams = mapOf(
+                    "phoneId" to cfg.phoneId,
+                    "userId" to cfg.userId,
+                    "sessionToken" to cfg.sessionToken,
+                    "rut" to cfg.rut
+                )
+            )
+
+            val dataObj = resp.optJSONObject("data") ?: resp
+            val acumulado = dataObj.optInt("accumulatedAmountToActivateBenefit", cfg.daleQrAcumulado)
+            val meta = dataObj.optInt("valueToActivateBenefit", if (cfg.daleQrMeta > 0) cfg.daleQrMeta else 42000)
+            val estado = dataObj.optString(
+                "estadoBeneficioLimiteTarifario",
+                dataObj.optString("status", cfg.daleQrEstado)
+            )
+
+            val updated = cfg.copy(
+                daleQrAcumulado = acumulado,
+                daleQrMeta = meta,
+                daleQrEstado = estado
+            )
+            BipC2dEngine.saveConfig(context, updated)
+            TicketManager.notifyConfigUpdated()
+            Log.i(TAG, "Beneficio Dale QR actualizado: $$acumulado / $$meta (estado=$estado)")
+            updated
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo actualizar beneficio Dale QR: ${e.message}")
+            cfg
+        }
     }
 
     private fun parseServerUtcEpochMs(serverUtcStr: String): Long? {

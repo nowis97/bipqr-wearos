@@ -46,12 +46,22 @@ data class StandaloneConfig(
     val serverEpochMs: Long = 0L,
     val deltaEpochMs: Long = 0L,
     val saldo: Int = 0,
-    val tiempoRefrescoSec: Int = 5
+    val tiempoRefrescoSec: Int = 5,
+    // Beneficio "Dale QR" (Monto Máximo Mensual)
+    val daleQrAcumulado: Int = 0,
+    val daleQrMeta: Int = 42000,
+    val daleQrEstado: String = ""
 ) {
     val isProvisioned: Boolean
         get() = privKeyBase64.isNotEmpty() &&
             uuid.isNotEmpty() &&
             (tramaSistemaCentral.length == 62 || (sessionToken.isNotEmpty() && nuAbt.isNotEmpty() && rut.isNotEmpty()))
+
+    val isDaleQrReached: Boolean
+        get() = daleQrMeta > 0 && daleQrAcumulado >= daleQrMeta
+
+    val daleQrProgress: Float
+        get() = if (daleQrMeta > 0) (daleQrAcumulado.toFloat() / daleQrMeta.toFloat()).coerceIn(0f, 1f) else 0f
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("privKeyBase64", privKeyBase64)
@@ -72,6 +82,9 @@ data class StandaloneConfig(
         put("deltaEpochMs", deltaEpochMs)
         put("saldo", saldo)
         put("tiempoRefrescoSec", tiempoRefrescoSec)
+        put("daleQrAcumulado", daleQrAcumulado)
+        put("daleQrMeta", daleQrMeta)
+        put("daleQrEstado", daleQrEstado)
     }
 
     companion object {
@@ -93,7 +106,10 @@ data class StandaloneConfig(
             serverEpochMs = json.optLong("serverEpochMs", 0L),
             deltaEpochMs = json.optLong("deltaEpochMs", 0L),
             saldo = json.optInt("saldo", 0),
-            tiempoRefrescoSec = json.optInt("tiempoRefrescoSec", 5).coerceAtLeast(3)
+            tiempoRefrescoSec = json.optInt("tiempoRefrescoSec", 5).coerceAtLeast(3),
+            daleQrAcumulado = json.optInt("daleQrAcumulado", 0),
+            daleQrMeta = json.optInt("daleQrMeta", 42000),
+            daleQrEstado = json.optString("daleQrEstado", "")
         )
     }
 }

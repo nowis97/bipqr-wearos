@@ -16,8 +16,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -86,7 +88,8 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                 BipWearApp(
                     activity = this,
                     onGenerateTicket = { generarPasajeStandalone() },
-                    onStartClaveUnica = { startClaveUnicaRemoteFlow() }
+                    onStartClaveUnica = { startClaveUnicaRemoteFlow() },
+                    onRefreshDaleQr = { refreshDaleQrAsync(showToast = true) }
                 )
             }
         }
@@ -96,6 +99,19 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         super.onResume()
         Wearable.getDataClient(this).addListener(this)
         Wearable.getMessageClient(this).addListener(this)
+        refreshDaleQrAsync(showToast = false)
+    }
+
+    private fun refreshDaleQrAsync(showToast: Boolean = false) {
+        val cfg = BipC2dEngine.loadConfig(this)
+        if (cfg.isProvisioned && cfg.sessionToken.isNotEmpty()) {
+            if (showToast) {
+                Toast.makeText(this, "Actualizando Dale QR...", Toast.LENGTH_SHORT).show()
+            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                RedApiClient.fetchDaleQrBenefitInfo(this@MainActivity)
+            }
+        }
     }
 
     override fun onPause() {
@@ -349,7 +365,8 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
 fun BipWearApp(
     activity: ComponentActivity,
     onGenerateTicket: () -> Unit,
-    onStartClaveUnica: () -> Unit
+    onStartClaveUnica: () -> Unit,
+    onRefreshDaleQr: () -> Unit
 ) {
     val context = LocalContext.current
     val ticketState by TicketManager.ticketState.collectAsState()
@@ -388,7 +405,8 @@ fun BipWearApp(
                     IdleScreen(
                         cfg = cfg,
                         onGenerate = onGenerateTicket,
-                        onRelink = onStartClaveUnica
+                        onRelink = onStartClaveUnica,
+                        onRefreshDaleQr = onRefreshDaleQr
                     )
                 }
                 is TicketState.Loading -> {
@@ -416,7 +434,8 @@ fun BipWearApp(
 fun IdleScreen(
     cfg: StandaloneConfig,
     onGenerate: () -> Unit,
-    onRelink: () -> Unit
+    onRelink: () -> Unit,
+    onRefreshDaleQr: () -> Unit
 ) {
     val context = LocalContext.current
     val isProvisioned = cfg.isProvisioned
@@ -427,21 +446,19 @@ fun IdleScreen(
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 14.dp)
     ) {
         Text(
             text = "bip!QR",
             color = Color(0xFFE50914),
-            fontSize = 20.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
-
-        Spacer(modifier = Modifier.height(4.dp))
 
         val subtitleText = if (isProvisioned) {
             val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
             val tramaStatus = if (isOfflineReady) "Offline listo" else "Online 2h"
-            "${cfg.rut} · $$clp\n($tramaStatus)"
+            "${cfg.rut} · $$clp ($tramaStatus)"
         } else {
             stringResource(R.string.status_not_provisioned)
         }
@@ -449,12 +466,21 @@ fun IdleScreen(
         Text(
             text = subtitleText,
             color = Color(0xFFAAAAAA),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 14.sp
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        if (isProvisioned) {
+            Spacer(modifier = Modifier.height(6.dp))
+            DaleQrCard(
+                acumulado = cfg.daleQrAcumulado,
+                meta = cfg.daleQrMeta,
+                isReached = cfg.isDaleQrReached,
+                onClick = onRefreshDaleQr
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Box(
             modifier = Modifier
@@ -471,16 +497,111 @@ fun IdleScreen(
                         }
                     }
                 )
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 7.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (isProvisioned) stringResource(R.string.btn_generate) else stringResource(R.string.btn_link_clave_unica),
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 textAlign = TextAlign.Center
             )
+        }
+    }
+}
+
+@Composable
+fun DaleQrCard(
+    acumulado: Int,
+    meta: Int,
+    isReached: Boolean,
+    onClick: () -> Unit
+) {
+    val metaClp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(meta)
+    val acumClp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(acumulado)
+
+    if (isReached) {
+        // Estado: Meta superada -> ¡Viajes gratis!
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF0D3818))
+                .clickable { onClick() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "🎉 ¡Viajes Gratis este mes!",
+                    color = Color(0xFF00E676),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Dale QR: $$acumClp acumulados",
+                    color = Color(0xFFB9F6CA),
+                    fontSize = 8.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    } else {
+        // Estado: Acumulando para la meta
+        val progress = if (meta > 0) (acumulado.toFloat() / meta.toFloat()).coerceIn(0f, 1f) else 0f
+        val pct = (progress * 100).toInt()
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF1E1E1E))
+                .clickable { onClick() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Dale QR",
+                        color = Color(0xFF00E5FF),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp
+                    )
+                    Text(
+                        text = "$$acumClp / $$metaClp ($pct%)",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 8.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(0xFF333333))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFF00E5FF))
+                    )
+                }
+            }
         }
     }
 }

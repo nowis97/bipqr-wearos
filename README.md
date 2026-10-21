@@ -19,7 +19,7 @@ Aplicación **100% Autónoma y Standalone** para generar pasajes dinámicos **bi
 * **Criptografía Nativa Sonda `libc2d`:** Implementación exacta en curva elíptica **`secp224r1` (`P-224`)** con firmas **`SHA224withECDSA`**, compatible con los validadores y torniquetes físicos de la red.
 * **Rotación Dinámica cada 5 segundos:** Rota la firma telemétrica en tiempo real mientras el pasaje está visible en pantalla, con brillo al 100% para una lectura óptica inmediata.
 * **Vinculación con ClaveÚnica vía Remote Intent:** Al iniciar sesión por primera vez, el reloj envía una orden nativa por Bluetooth (`RemoteActivityHelper`) para abrir la página oficial de ClaveÚnica en el navegador de tu teléfono (Chrome, Samsung Internet, etc.). Escribes tu clave con comodidad en la pantalla grande y el reloj detecta el éxito automáticamente.
-* **Visualización de Saldo:** Muestra tu saldo bip!QR actualizado en pesos chilenos (`$`).
+* **Visualización de Saldo y Dale QR:** Muestra tu saldo bip!QR actualizado en pesos chilenos (`$`) y el avance mensual del beneficio **Dale QR** (Monto Máximo Mensual de `$42.000` con barra de progreso e insignia de viajes gratis).
 * **Compilación Automatizada:** GitHub Actions compila automáticamente la APK lista para instalar con cada cambio.
 
 ---
