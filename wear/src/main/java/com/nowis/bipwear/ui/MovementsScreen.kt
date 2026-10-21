@@ -120,7 +120,10 @@ fun MovementsScreen(
                     }
                 }
 
-                items(uiState.movements) { item ->
+                items(
+                    items = uiState.movements,
+                    key = { item -> if (item.id.isNotBlank()) item.id else "${item.dateTimeStr}_${item.amount}" }
+                ) { item ->
                     MovementItemRow(item = item)
                     Spacer(modifier = Modifier.height(4.dp))
                 }
@@ -222,25 +225,28 @@ fun getMovementVisuals(item: BipMovement): Triple<String, String, Color> {
     }
 }
 
+private val inputFormatters = listOf(
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US),
+    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US),
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US),
+    SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.US),
+    SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US),
+    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US)
+)
+private val outputFormatter = SimpleDateFormat("dd MMM, HH:mm", Locale("es", "CL"))
+private val dateFormatLock = Any()
+
 fun formatMovementDate(raw: String): String {
     if (raw.isBlank()) return ""
-    val inputPatterns = listOf(
-        "yyyy-MM-dd'T'HH:mm:ss",
-        "yyyy-MM-dd HH:mm:ss",
-        "yyyy-MM-dd HH:mm",
-        "dd-MM-yyyy HH:mm:ss",
-        "dd-MM-yyyy HH:mm",
-        "dd/MM/yyyy HH:mm"
-    )
-    for (pat in inputPatterns) {
-        try {
-            val sdf = SimpleDateFormat(pat, Locale.US)
-            val date = sdf.parse(raw)
-            if (date != null) {
-                val outSdf = SimpleDateFormat("dd MMM, HH:mm", Locale("es", "CL"))
-                return outSdf.format(date)
-            }
-        } catch (_: Exception) {}
+    synchronized(dateFormatLock) {
+        for (sdf in inputFormatters) {
+            try {
+                val date = sdf.parse(raw)
+                if (date != null) {
+                    return outputFormatter.format(date)
+                }
+            } catch (_: Exception) {}
+        }
     }
     return raw
 }

@@ -16,10 +16,3 @@ data class MovementsUiState(
     val movements: List<BipMovement> = emptyList(),
     val errorMessage: String? = null
 )
-
-data class DaleQrUiState(
-    val acumulado: Int = 0,
-    val meta: Int = 42000,
-    val isReached: Boolean = false,
-    val progress: Float = 0f
-)
