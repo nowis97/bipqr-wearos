@@ -441,78 +441,99 @@ fun IdleScreen(
     val isProvisioned = cfg.isProvisioned
     val isOfflineReady = remember(cfg) { BipC2dEngine.isTramaValid(context) }
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 14.dp)
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "bip!QR",
-            color = Color(0xFFE50914),
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        val subtitleText = if (isProvisioned) {
-            val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
-            val tramaStatus = if (isOfflineReady) "Offline listo" else "Online 2h"
-            "${cfg.rut} · $$clp ($tramaStatus)"
-        } else {
-            stringResource(R.string.status_not_provisioned)
-        }
-
-        Text(
-            text = subtitleText,
-            color = Color(0xFFAAAAAA),
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center
-        )
-
+        // Anillo circular nativo en el borde de la pantalla redonda
         if (isProvisioned) {
-            Spacer(modifier = Modifier.height(6.dp))
-            DaleQrCard(
-                acumulado = cfg.daleQrAcumulado,
-                meta = cfg.daleQrMeta,
-                isReached = cfg.isDaleQrReached,
-                onClick = onRefreshDaleQr
+            val progress = if (cfg.isDaleQrReached) 1f else cfg.daleQrProgress
+            CircularProgressIndicator(
+                progress = progress,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(3.dp),
+                indicatorColor = if (cfg.isDaleQrReached) Color(0xFF00E676) else Color(0xFF00E5FF),
+                trackColor = Color(0xFF222222),
+                strokeWidth = 3.5.dp
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Box(
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFFE50914))
-                .combinedClickable(
-                    onClick = {
-                        if (isProvisioned) onGenerate() else onRelink()
-                    },
-                    onLongClick = {
-                        if (isProvisioned) {
-                            Toast.makeText(context, "Re-vinculando ClaveÚnica...", Toast.LENGTH_SHORT).show()
-                            onRelink()
-                        }
-                    }
-                )
-                .padding(horizontal = 14.dp, vertical = 7.dp),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
         ) {
             Text(
-                text = if (isProvisioned) stringResource(R.string.btn_generate) else stringResource(R.string.btn_link_clave_unica),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
+                text = "bip!QR",
+                color = Color(0xFFE50914),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            val subtitleText = if (isProvisioned) {
+                val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
+                val tramaStatus = if (isOfflineReady) "Offline listo" else "Online 2h"
+                "${cfg.rut} · $$clp ($tramaStatus)"
+            } else {
+                stringResource(R.string.status_not_provisioned)
+            }
+
+            Text(
+                text = subtitleText,
+                color = Color(0xFFAAAAAA),
+                fontSize = 10.sp,
                 textAlign = TextAlign.Center
             )
+
+            if (isProvisioned) {
+                Spacer(modifier = Modifier.height(6.dp))
+                DaleQrBadge(
+                    acumulado = cfg.daleQrAcumulado,
+                    meta = cfg.daleQrMeta,
+                    isReached = cfg.isDaleQrReached,
+                    onClick = onRefreshDaleQr
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFFE50914))
+                    .combinedClickable(
+                        onClick = {
+                            if (isProvisioned) onGenerate() else onRelink()
+                        },
+                        onLongClick = {
+                            if (isProvisioned) {
+                                Toast.makeText(context, "Re-vinculando ClaveÚnica...", Toast.LENGTH_SHORT).show()
+                                onRelink()
+                            }
+                        }
+                    )
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isProvisioned) stringResource(R.string.btn_generate) else stringResource(R.string.btn_link_clave_unica),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
 @Composable
-fun DaleQrCard(
+fun DaleQrBadge(
     acumulado: Int,
     meta: Int,
     isReached: Boolean,
@@ -525,11 +546,10 @@ fun DaleQrCard(
         // Estado: Meta superada -> ¡Viajes gratis!
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF0D3818))
                 .clickable { onClick() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -541,7 +561,7 @@ fun DaleQrCard(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Dale QR: $$acumClp acumulados",
+                    text = "Dale QR: $$acumClp superado",
                     color = Color(0xFFB9F6CA),
                     fontSize = 8.sp,
                     textAlign = TextAlign.Center
@@ -555,53 +575,19 @@ fun DaleQrCard(
 
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF1E1E1E))
+                .background(Color(0xFF1A1A1A))
                 .clickable { onClick() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Dale QR",
-                        color = Color(0xFF00E5FF),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp
-                    )
-                    Text(
-                        text = "$$acumClp / $$metaClp ($pct%)",
-                        color = Color(0xFFAAAAAA),
-                        fontSize = 8.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(3.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFF333333))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(Color(0xFF00E5FF))
-                    )
-                }
-            }
+            Text(
+                text = "Dale QR: $$acumClp / $$metaClp ($pct%)",
+                color = Color(0xFF00E5FF),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 9.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
