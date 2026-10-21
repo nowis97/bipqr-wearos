@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -44,6 +46,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.items
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
@@ -421,7 +426,8 @@ fun BipWearApp(
                         cfg = cfg,
                         onGenerate = onGenerateTicket,
                         onRelink = onStartClaveUnica,
-                        onRefreshDaleQr = onRefreshDaleQr
+                        onRefreshDaleQr = onRefreshDaleQr,
+                        onViewMovements = { TicketManager.setState(TicketState.Movements) }
                     )
                 }
                 is TicketState.Loading -> {
@@ -431,6 +437,11 @@ fun BipWearApp(
                     TicketScreen(
                         ticket = state.ticket,
                         onRefresh = onGenerateTicket
+                    )
+                }
+                is TicketState.Movements -> {
+                    MovementsScreen(
+                        onBack = { TicketManager.setState(TicketState.Idle) }
                     )
                 }
                 is TicketState.Error -> {
@@ -450,7 +461,8 @@ fun IdleScreen(
     cfg: StandaloneConfig,
     onGenerate: () -> Unit,
     onRelink: () -> Unit,
-    onRefreshDaleQr: () -> Unit
+    onRefreshDaleQr: () -> Unit,
+    onViewMovements: () -> Unit
 ) {
     val context = LocalContext.current
     val isProvisioned = cfg.isProvisioned
@@ -556,6 +568,27 @@ fun IdleScreen(
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center
                 )
+            }
+
+            if (isProvisioned) {
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1E1E1E))
+                        .clickable { onViewMovements() }
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "📋 Movimientos",
+                        color = Color(0xFFDDDDDD),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -757,4 +790,236 @@ fun TicketScreen(
             textAlign = TextAlign.Center
         )
     }
+}
+
+@Composable
+fun MovementsScreen(
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    BackHandler(onBack = onBack)
+
+    var movements by remember { mutableStateOf(RedApiClient.loadCachedMovements(context)) }
+    var isLoading by remember { mutableStateOf(movements.isEmpty()) }
+    val listState = rememberScalingLazyListState()
+
+    val refreshMovements: () -> Unit = {
+        isLoading = true
+        (context as? ComponentActivity)?.lifecycleScope?.launch(Dispatchers.IO) {
+            val fresh = RedApiClient.fetchTransactions(context)
+            withContext(Dispatchers.Main) {
+                movements = fresh
+                isLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        refreshMovements()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading && movements.isEmpty()) {
+            LoadingScreen(message = "Cargando movimientos...")
+        } else if (movements.isEmpty()) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp)
+            ) {
+                Text(text = "📋", fontSize = 24.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Sin movimientos",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Tus viajes en bus, metro y tren aparecerán aquí.",
+                    color = Color.Gray,
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF222222))
+                        .clickable { onBack() }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Volver",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        } else {
+            ScalingLazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                item {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clickable { refreshMovements() }
+                    ) {
+                        Text(
+                            text = "Últimos movimientos",
+                            color = Color(0xFFE50914),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = if (isLoading) "Actualizando..." else "${movements.size} registrados · Toca para recargar",
+                            color = Color.Gray,
+                            fontSize = 8.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                items(movements) { item ->
+                    MovementItemRow(item = item)
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF222222))
+                            .clickable { onBack() }
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Volver al inicio",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MovementItemRow(item: BipMovement) {
+    val (icon, label, accentColor) = getMovementVisuals(item)
+    val formattedDate = formatMovementDate(item.dateTimeStr)
+
+    val amountText = when {
+        item.isFreeTrip -> "$0"
+        item.isCarga -> "+$${NumberFormat.getIntegerInstance(Locale("es", "CL")).format(item.amount.coerceAtLeast(0))}"
+        item.amount > 0 -> "-$${NumberFormat.getIntegerInstance(Locale("es", "CL")).format(item.amount)}"
+        else -> "$0"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF161616))
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = icon,
+                fontSize = 16.sp
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 10.sp,
+                    maxLines = 1
+                )
+                if (formattedDate.isNotBlank()) {
+                    Text(
+                        text = formattedDate,
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 8.sp
+                    )
+                }
+            }
+            Text(
+                text = amountText,
+                color = accentColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+fun getMovementVisuals(item: BipMovement): Triple<String, String, Color> {
+    val descLower = item.description.lowercase(Locale.ROOT)
+    val typeLower = item.transportType.lowercase(Locale.ROOT)
+
+    return when {
+        item.isFreeTrip || descLower.contains("gratis") || descLower.contains("dale") -> {
+            Triple("🎉", if (item.description.isNotBlank()) item.description else "Viaje gratis Dale QR", Color(0xFF00E676))
+        }
+        item.isCarga || descLower.contains("carga") -> {
+            Triple("💳", if (item.description.isNotBlank()) item.description else "Carga de saldo", Color(0xFF4CAF50))
+        }
+        descLower.contains("metro") || typeLower.contains("metro") || descLower.contains("estaci") -> {
+            Triple("🚇", if (item.description.isNotBlank()) item.description else "Viaje en Metro", Color(0xFFFF5252))
+        }
+        descLower.contains("tren") || typeLower.contains("tren") -> {
+            Triple("🚆", if (item.description.isNotBlank()) item.description else "Viaje en Tren", Color(0xFFFF9800))
+        }
+        else -> {
+            Triple("🚌", if (item.description.isNotBlank()) item.description else "Viaje en Bus", Color(0xFF00E5FF))
+        }
+    }
+}
+
+fun formatMovementDate(raw: String): String {
+    if (raw.isBlank()) return ""
+    val inputPatterns = listOf(
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "dd-MM-yyyy HH:mm:ss",
+        "dd-MM-yyyy HH:mm",
+        "dd/MM/yyyy HH:mm"
+    )
+    for (pat in inputPatterns) {
+        try {
+            val sdf = SimpleDateFormat(pat, Locale.US)
+            val date = sdf.parse(raw)
+            if (date != null) {
+                val outSdf = SimpleDateFormat("dd MMM, HH:mm", Locale("es", "CL"))
+                return outSdf.format(date)
+            }
+        } catch (_: Exception) {}
+    }
+    return raw
 }

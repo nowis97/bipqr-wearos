@@ -30,6 +30,21 @@ data class ClaveUnicaUserProfile(
     val phoneNumber: String
 )
 
+data class BipMovement(
+    val id: String = "",
+    val dateTimeStr: String = "",
+    val amount: Int = 0,
+    val transportType: String = "",
+    val description: String = "",
+    val status: String = ""
+) {
+    val isFreeTrip: Boolean
+        get() = amount == 0 || description.contains("gratis", ignoreCase = true) || status.contains("free", ignoreCase = true)
+
+    val isCarga: Boolean
+        get() = transportType.contains("CARGA", ignoreCase = true) || description.contains("carga", ignoreCase = true)
+}
+
 object RedApiClient {
     private const val TAG = "RedApiClient"
 
@@ -474,6 +489,171 @@ object RedApiClient {
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo actualizar beneficio Dale QR: ${e.message}")
             cfg
+        }
+    }
+
+    private const val PREFS_MOVEMENTS = "bip_movements_cache"
+    private const val KEY_MOVEMENTS_JSON = "cached_movements"
+
+    /**
+     * Consulta el historial de movimientos y viajes realizados en la cuenta bip!QR.
+     * Endpoint oficial: POST /phone/v13/payment/qr/account/transactions
+     */
+    fun fetchTransactions(context: Context): List<BipMovement> {
+        val cfg = BipC2dEngine.loadConfig(context)
+        if (cfg.sessionToken.isEmpty() || cfg.userId.isEmpty() || cfg.phoneId.isEmpty()) {
+            return loadCachedMovements(context)
+        }
+
+        return try {
+            val resp = requestWithFallback(
+                cfg = cfg,
+                method = "POST",
+                endpointPath = "/payment/qr/account/transactions",
+                formParams = mapOf(
+                    "phoneId" to cfg.phoneId,
+                    "userId" to cfg.userId,
+                    "sessionToken" to cfg.sessionToken,
+                    "rut" to cfg.rut
+                )
+            )
+
+            val status = resp.optInt("status", resp.optInt("httpCode", 200))
+            if (status !in 200..299) {
+                Log.w(TAG, "Consulta de transacciones devolvió status $status")
+                return loadCachedMovements(context)
+            }
+
+            val list = parseTransactionsJson(resp)
+            if (list.isNotEmpty()) {
+                saveCachedMovements(context, list)
+                Log.i(TAG, "Se sincronizaron ${list.size} movimientos bip!QR exitosamente")
+                list
+            } else {
+                loadCachedMovements(context)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "No fue posible actualizar movimientos: ${e.message}")
+            loadCachedMovements(context)
+        }
+    }
+
+    private fun parseTransactionsJson(root: JSONObject): List<BipMovement> {
+        val list = mutableListOf<BipMovement>()
+        val dataObj = root.optJSONObject("data") ?: root
+
+        val array = dataObj.optJSONArray("transactions")
+            ?: dataObj.optJSONArray("transacciones")
+            ?: dataObj.optJSONArray("movimientos")
+            ?: dataObj.optJSONArray("items")
+            ?: dataObj.optJSONArray("list")
+            ?: root.optJSONArray("data")
+            ?: return emptyList()
+
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val id = item.optString("transactionId", item.optString("id", "${System.currentTimeMillis()}_$i"))
+            val dateTime = item.optString("transactionDateTime",
+                item.optString("dateTime",
+                    item.optString("fechaHora",
+                        item.optString("fecha",
+                            item.optString("date", "")
+                        )
+                    )
+                )
+            )
+            val amount = parseNumericValue(
+                item,
+                "amount", "monto", "valor", "cost", "tarifa", "montoTransaccion", "fare",
+                default = 0
+            )
+            val transportType = item.optString("transportType",
+                item.optString("tipoTransporte",
+                    item.optString("transport",
+                        item.optString("modo",
+                            item.optString("type",
+                                item.optString("tipo", "")
+                            )
+                        )
+                    )
+                )
+            )
+            val description = item.optString("description",
+                item.optString("descripcion",
+                    item.optString("detalle",
+                        item.optString("stationName",
+                            item.optString("service",
+                                item.optString("servicio",
+                                    item.optString("bus",
+                                        item.optString("operator", "")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+            val status = item.optString("status", item.optString("estado", ""))
+
+            list.add(
+                BipMovement(
+                    id = id,
+                    dateTimeStr = dateTime,
+                    amount = amount,
+                    transportType = transportType,
+                    description = description,
+                    status = status
+                )
+            )
+        }
+        return list
+    }
+
+    fun saveCachedMovements(context: Context, movements: List<BipMovement>) {
+        try {
+            val arr = org.json.JSONArray()
+            for (m in movements) {
+                arr.put(JSONObject().apply {
+                    put("id", m.id)
+                    put("dateTimeStr", m.dateTimeStr)
+                    put("amount", m.amount)
+                    put("transportType", m.transportType)
+                    put("description", m.description)
+                    put("status", m.status)
+                })
+            }
+            context.getSharedPreferences(PREFS_MOVEMENTS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_MOVEMENTS_JSON, arr.toString())
+                .apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error guardando movimientos en caché", e)
+        }
+    }
+
+    fun loadCachedMovements(context: Context): List<BipMovement> {
+        return try {
+            val raw = context.getSharedPreferences(PREFS_MOVEMENTS, Context.MODE_PRIVATE)
+                .getString(KEY_MOVEMENTS_JSON, null) ?: return emptyList()
+            val arr = org.json.JSONArray(raw)
+            val list = mutableListOf<BipMovement>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    BipMovement(
+                        id = obj.optString("id"),
+                        dateTimeStr = obj.optString("dateTimeStr"),
+                        amount = obj.optInt("amount"),
+                        transportType = obj.optString("transportType"),
+                        description = obj.optString("description"),
+                        status = obj.optString("status")
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cargando movimientos de caché", e)
+            emptyList()
         }
     }
 

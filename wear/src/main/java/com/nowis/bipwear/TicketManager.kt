@@ -27,6 +27,7 @@ sealed class TicketState {
     data class Loading(val message: String) : TicketState()
     data class Active(val ticket: TicketData) : TicketState()
     data class Error(val errorMessage: String) : TicketState()
+    object Movements : TicketState()
 }
 
 object TicketManager {
