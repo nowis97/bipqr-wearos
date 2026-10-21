@@ -20,25 +20,27 @@ interface BipRepository {
 }
 
 class DefaultBipRepository(
-    private val context: Context,
+    context: Context,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : BipRepository {
 
+    private val appContext = context.applicationContext ?: context
+
     override fun getConfig(): StandaloneConfig {
-        return BipC2dEngine.loadConfig(context)
+        return BipC2dEngine.loadConfig(appContext)
     }
 
     override fun isTramaValid(): Boolean {
-        return BipC2dEngine.isTramaValid(context)
+        return BipC2dEngine.isTramaValid(appContext)
     }
 
     override fun getCachedMovements(): List<BipMovement> {
-        return RedApiClient.loadCachedMovements(context)
+        return RedApiClient.loadCachedMovements(appContext)
     }
 
     override suspend fun fetchMovements(): Result<List<BipMovement>> = withContext(ioDispatcher) {
         try {
-            val fresh = RedApiClient.fetchTransactions(context)
+            val fresh = RedApiClient.fetchTransactions(appContext)
             Result.success(fresh)
         } catch (e: Exception) {
             Result.failure(e)
@@ -47,7 +49,7 @@ class DefaultBipRepository(
 
     override suspend fun refreshDaleQr(): Result<StandaloneConfig> = withContext(ioDispatcher) {
         try {
-            val updated = RedApiClient.fetchDaleQrBenefitInfo(context)
+            val updated = RedApiClient.fetchDaleQrBenefitInfo(appContext)
             Result.success(updated)
         } catch (e: Exception) {
             Result.failure(e)
@@ -55,6 +57,6 @@ class DefaultBipRepository(
     }
 
     override fun importConfigJson(jsonStr: String): Boolean {
-        return TicketManager.importStandaloneConfigJson(context, jsonStr)
+        return TicketManager.importStandaloneConfigJson(appContext, jsonStr)
     }
 }
