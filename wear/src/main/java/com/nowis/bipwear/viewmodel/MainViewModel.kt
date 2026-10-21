@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(
     private val repository: BipRepository,
@@ -50,9 +51,13 @@ class MainViewModel(
             val result = repository.refreshDaleQr()
             result.onSuccess { updated ->
                 _config.value = updated
-                onResult("Dale QR: $${updated.daleQrAcumulado} / $${updated.daleQrMeta}")
+                withContext(Dispatchers.Main) {
+                    onResult("Dale QR: $${updated.daleQrAcumulado} / $${updated.daleQrMeta}")
+                }
             }.onFailure { err ->
-                onResult("Error Dale QR: ${err.message}")
+                withContext(Dispatchers.Main) {
+                    onResult("Error Dale QR: ${err.message}")
+                }
             }
         }
     }
