@@ -9,7 +9,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FakeBipRepository(
+    @get:JvmName("getConfigProperty")
+    @set:JvmName("setConfigProperty")
     var config: StandaloneConfig = StandaloneConfig(),
+    @get:JvmName("isTramaValidProperty")
+    @set:JvmName("setTramaValidProperty")
     var isTramaValid: Boolean = true,
     var movements: List<BipMovement> = emptyList(),
     var fetchMovementsResult: Result<List<BipMovement>>? = null,
