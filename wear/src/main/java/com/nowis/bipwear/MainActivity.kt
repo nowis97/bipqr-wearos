@@ -387,8 +387,10 @@ fun BipWearApp(
                 is MainUiState.Active -> {
                     TicketScreen(
                         ticket = state.ticket,
+                        cfg = cfg,
                         onRefresh = onGenerateTicket,
-                        onAutoRefreshTriggered = onAutoRefreshTriggered
+                        onAutoRefreshTriggered = onAutoRefreshTriggered,
+                        onViewMovements = { mainViewModel.setState(MainUiState.Movements) }
                     )
                 }
                 is MainUiState.Movements -> {

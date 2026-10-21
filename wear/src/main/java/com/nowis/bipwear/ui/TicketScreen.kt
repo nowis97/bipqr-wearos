@@ -28,8 +28,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.Text
 import com.nowis.bipwear.R
+import com.nowis.bipwear.StandaloneConfig
 import com.nowis.bipwear.TicketData
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -39,8 +41,10 @@ import java.util.Locale
 @Composable
 fun TicketScreen(
     ticket: TicketData,
+    cfg: StandaloneConfig,
     onRefresh: () -> Unit,
-    onAutoRefreshTriggered: () -> Unit
+    onAutoRefreshTriggered: () -> Unit,
+    onViewMovements: () -> Unit
 ) {
     LaunchedEffect(ticket.expiryTimestampMs) {
         while (isActive) {
@@ -76,53 +80,102 @@ fun TicketScreen(
     }
     val timerColor = if (isExpired) Color(0xFFE50914) else Color(0xFF00E676)
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable { onRefresh() }
-            .padding(bottom = 4.dp)
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = timerText,
-            color = timerColor,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
+        // Anillo Dale QR en el bisel exterior
+        if (cfg.isProvisioned) {
+            val rawProgress = cfg.daleQrProgress
+            val progress = when {
+                cfg.isDaleQrReached -> 1f
+                rawProgress > 0f -> rawProgress.coerceIn(0.035f, 1f)
+                else -> 0f
+            }
+            val ringColor = if (cfg.isDaleQrReached) Color(0xFF00E676) else Color(0xFF00E5FF)
+            val ringTrackColor = if (cfg.isDaleQrReached) Color(0x3300E676) else Color(0x3300E5FF)
 
-        Spacer(modifier = Modifier.height(3.dp))
-
-        Box(
-            modifier = Modifier
-                .size(130.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.White)
-                .padding(3.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                bitmap = ticket.bitmap.asImageBitmap(),
-                contentDescription = "bip!QR Ticket",
-                modifier = Modifier.fillMaxSize()
+            CircularProgressIndicator(
+                progress = progress,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(5.dp),
+                startAngle = 270f,
+                endAngle = 270f,
+                indicatorColor = ringColor,
+                trackColor = ringTrackColor,
+                strokeWidth = 4.dp
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 2.dp)
+        ) {
+            Text(
+                text = timerText,
+                color = timerColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
 
-        val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(ticket.saldo)
-        val instructionsText = if (ticket.saldo > 0) {
-            "Saldo: $$clp · Toca para actualizar"
-        } else {
-            stringResource(R.string.status_ticket_ready)
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // Contenedor blanco de alto contraste para lectura óptica en torniquetes
+            Box(
+                modifier = Modifier
+                    .size(122.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White)
+                    .clickable { onRefresh() }
+                    .padding(3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    bitmap = ticket.bitmap.asImageBitmap(),
+                    contentDescription = "bip!QR Ticket",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(ticket.saldo)
+            val instructionsText = if (ticket.saldo > 0) {
+                "Saldo: $$clp"
+            } else {
+                stringResource(R.string.status_ticket_ready)
+            }
+
+            Text(
+                text = instructionsText,
+                color = Color(0xFFAAAAAA),
+                fontSize = 9.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF1E1E1E))
+                    .clickable { onViewMovements() }
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "📋 Movimientos",
+                    color = Color(0xFFDDDDDD),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
-
-        Text(
-            text = instructionsText,
-            color = Color(0xFFAAAAAA),
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center
-        )
     }
 }
