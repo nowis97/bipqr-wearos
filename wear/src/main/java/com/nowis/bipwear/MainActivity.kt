@@ -41,6 +41,7 @@ import com.nowis.bipwear.ui.LoadingScreen
 import com.nowis.bipwear.ui.MovementsScreen
 import com.nowis.bipwear.ui.TicketScreen
 import com.nowis.bipwear.ui.state.MainUiState
+import com.nowis.bipwear.util.BipHapticHelper
 import com.nowis.bipwear.viewmodel.MainViewModel
 import com.nowis.bipwear.viewmodel.MovementsViewModel
 import kotlinx.coroutines.Dispatchers
@@ -80,8 +81,18 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
             }
         }
 
-        // Fast-path auto generation from Tile or Complication
-        handleAutoGenerateIntent(intent)
+        // Fast-path auto generation:
+        // On fresh launch (savedInstanceState == null), automatically generate ticket if provisioned (Turnstile Fast-Path)
+        // or if explicitly requested via EXTRA_AUTO_GENERATE (from Tile / Complication)
+        if (savedInstanceState == null) {
+            intent?.removeExtra(EXTRA_AUTO_GENERATE)
+            val cfg = BipC2dEngine.loadConfig(this)
+            if (cfg.isProvisioned) {
+                generarPasajeStandalone()
+            }
+        } else {
+            handleAutoGenerateIntent(intent)
+        }
 
         setContent {
             MaterialTheme {
@@ -105,6 +116,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
 
     private fun handleAutoGenerateIntent(targetIntent: Intent?) {
         if (targetIntent?.getBooleanExtra(EXTRA_AUTO_GENERATE, false) == true) {
+            targetIntent.removeExtra(EXTRA_AUTO_GENERATE)
             val cfg = BipC2dEngine.loadConfig(this)
             if (cfg.isProvisioned) {
                 generarPasajeStandalone()
@@ -128,13 +140,31 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
 
     private fun observeTicketState() {
         lifecycleScope.launch {
+            var wasActive = false
             TicketManager.ticketState.collect { state ->
                 when (state) {
-                    is TicketState.Active -> mainViewModel.setTicketActive(state.ticket)
-                    is TicketState.Error -> mainViewModel.setError(state.errorMessage)
-                    is TicketState.Loading -> mainViewModel.setState(MainUiState.Loading(state.message))
-                    is TicketState.Movements -> mainViewModel.setState(MainUiState.Movements)
-                    is TicketState.Idle -> { /* Idle is handled by ViewModel */ }
+                    is TicketState.Active -> {
+                        if (!wasActive) {
+                            BipHapticHelper.vibrateTicketReady(this@MainActivity)
+                            wasActive = true
+                        }
+                        mainViewModel.setTicketActive(state.ticket)
+                    }
+                    is TicketState.Error -> {
+                        wasActive = false
+                        mainViewModel.setError(state.errorMessage)
+                    }
+                    is TicketState.Loading -> {
+                        wasActive = false
+                        mainViewModel.setState(MainUiState.Loading(state.message))
+                    }
+                    is TicketState.Movements -> {
+                        wasActive = false
+                        mainViewModel.setState(MainUiState.Movements)
+                    }
+                    is TicketState.Idle -> {
+                        wasActive = false
+                    }
                 }
             }
         }

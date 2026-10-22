@@ -170,7 +170,7 @@ object BipTileLayoutHelper {
         } else {
             column.addContent(LayoutElementBuilders.Spacer.Builder().setHeight(dp(8f)).build())
             column.addContent(
-                Text.Builder(context, "No vinculada")
+                Text.Builder(context, context.getString(R.string.tile_status_not_linked))
                     .setTypography(Typography.TYPOGRAPHY_BODY2)
                     .setColor(argb(COLOR_MUTED_GRAY))
                     .build()

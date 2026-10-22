@@ -22,6 +22,7 @@
     <string name="tile_btn_generate">Generar QR</string>
     <string name="tile_btn_link">Vincular</string>
     <string name="tile_status_offline_ready">Offline listo</string>
+    <string name="tile_status_not_linked">No vinculada</string>
     <string name="tile_status_online">Online</string>
     <string name="tile_dale_qr_target">¡Viajes Gratis!</string>
     <string name="tile_dale_qr_prefix">Dale QR: </string>

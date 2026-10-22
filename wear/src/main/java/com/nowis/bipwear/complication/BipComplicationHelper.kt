@@ -15,7 +15,7 @@ import com.nowis.bipwear.tile.BipTileLayoutHelper
 object BipComplicationHelper {
     const val TITLE_TEXT = "bip!"
     const val DALE_QR_MAX_VALUE = 42000f
-    const val EXTRA_AUTO_GENERATE = "extra_auto_generate"
+    const val EXTRA_AUTO_GENERATE = MainActivity.EXTRA_AUTO_GENERATE
 
     fun getBalanceText(config: StandaloneConfig): String {
         return BipTileLayoutHelper.getFormattedBalance(config)
@@ -64,7 +64,7 @@ object BipComplicationHelper {
                     value = value,
                     min = 0f,
                     max = DALE_QR_MAX_VALUE,
-                    contentDescription = PlainComplicationText.Builder("Dale QR: $value de $DALE_QR_MAX_VALUE").build()
+                    contentDescription = PlainComplicationText.Builder("Dale QR: ${value.toInt()} de ${DALE_QR_MAX_VALUE.toInt()}").build()
                 )
                     .setText(text)
                     .setTitle(title)
