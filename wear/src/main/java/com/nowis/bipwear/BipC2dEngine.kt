@@ -187,6 +187,12 @@ object BipC2dEngine {
     fun saveConfig(context: Context, config: StandaloneConfig) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_CONFIG_JSON, config.toJson().toString()).apply()
+        // Notify Wear OS surfaces (Tile and Complication)
+        try {
+            com.nowis.bipwear.tile.BipSurfaceUpdateHelper.requestSurfaceUpdates(context.applicationContext ?: context)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error actualizando superficies Wear OS", e)
+        }
     }
 
     fun sha256Hex(input: String): String {
