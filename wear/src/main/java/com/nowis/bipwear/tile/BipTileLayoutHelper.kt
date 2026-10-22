@@ -147,6 +147,10 @@ object BipTileLayoutHelper {
                     ActionBuilders.AndroidActivity.Builder()
                         .setPackageName(context.packageName)
                         .setClassName(MainActivity::class.java.name)
+                        .addKeyToExtraMapping(
+                            MainActivity.EXTRA_AUTO_GENERATE,
+                            ActionBuilders.AndroidBooleanExtra.Builder().setValue(true).build()
+                        )
                         .build()
                 )
                 .build()

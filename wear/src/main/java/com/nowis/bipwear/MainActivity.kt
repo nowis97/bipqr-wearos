@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
 
     companion object {
         private const val TAG = "BipMainActivity"
+        const val EXTRA_AUTO_GENERATE = "extra_auto_generate"
         const val PATH_STANDALONE_CONFIG = "/bip/standalone_config"
         const val PATH_REFRESH_SEED = "/bip/refresh_seed"
         const val PATH_TICKET_ERROR = "/bip/ticket_error"
@@ -68,6 +70,19 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         observeTicketState()
         syncStoredDataItems()
 
+        // Handle physical back button: return to Idle instead of instantly exiting if on Ticket or Movements screen
+        onBackPressedDispatcher.addCallback(this) {
+            if (mainViewModel.uiState.value !is MainUiState.Idle) {
+                TicketManager.setState(TicketState.Idle)
+                mainViewModel.resetToIdle()
+            } else {
+                finish()
+            }
+        }
+
+        // Fast-path auto generation from Tile or Complication
+        handleAutoGenerateIntent(intent)
+
         setContent {
             MaterialTheme {
                 BipWearApp(
@@ -78,6 +93,21 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
                     onStartClaveUnica = { startClaveUnicaRemoteFlow() },
                     onAutoRefreshTriggered = { renderOfflineTicketNow() }
                 )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAutoGenerateIntent(intent)
+    }
+
+    private fun handleAutoGenerateIntent(targetIntent: Intent?) {
+        if (targetIntent?.getBooleanExtra(EXTRA_AUTO_GENERATE, false) == true) {
+            val cfg = BipC2dEngine.loadConfig(this)
+            if (cfg.isProvisioned) {
+                generarPasajeStandalone()
             }
         }
     }
