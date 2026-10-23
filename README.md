@@ -6,6 +6,7 @@
 ![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20Wear-green?logo=jetpackcompose)
 ![Architecture](https://img.shields.io/badge/Architecture-MVVM%20%7C%20100%25%20Standalone-success)
 ![Cryptography](https://img.shields.io/badge/Crypto-ECDSA%20secp224r1%20%7C%20SHA224-orange)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Aplicación **100% Autónoma y Standalone** para generar pasajes dinámicos **bip!QR** de la red de transporte público de Santiago de Chile (Metro, micros Red y Tren Nos) directamente en tu reloj inteligente con **Wear OS**.
 
@@ -204,3 +205,9 @@ Para compilar el proyecto y ejecutar la suite completa de 31 pruebas unitarias:
 * No tiene afiliación, patrocinio ni relación oficial con el Ministerio de Transportes y Telecomunicaciones (MTT), Directorio de Transporte Público Metropolitano (DTPM), Metro de Santiago ni SONDA S.A.
 * **La aplicación no comete fraude ni evasión:** utiliza las credenciales legítimas del usuario mediante ClaveÚnica y debita el importe oficial del pasaje de los fondos o saldo del usuario en el sistema de transporte.
 * Todas las marcas registradas pertenecen a sus respectivos titulares.
+
+---
+
+## 📄 Licencia
+
+Este proyecto está liberado bajo la Licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para conocer los términos completos.
