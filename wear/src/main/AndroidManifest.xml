@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -45,6 +46,38 @@
                     android:scheme="wear"
                     android:pathPrefix="/qr" />
             </intent-filter>
+        </service>
+
+        <!-- Tile Service: Swipeable card for Balance, Dale QR, and Quick Launch -->
+        <service
+            android:name=".tile.BipTileService"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/tile_name"
+            android:description="@string/tile_description"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+        </service>
+
+        <!-- Watch Face Complication Service: Complication for watch dials -->
+        <service
+            android:name=".complication.BipComplicationService"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/complication_name"
+            android:description="@string/complication_description"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT,RANGED_VALUE" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="900" />
         </service>
 
     </application>

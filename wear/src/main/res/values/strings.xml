@@ -15,4 +15,17 @@
     <string name="status_no_phone">Sin conexión con el teléfono</string>
     <string name="status_expired">Pasaje expirado · Toca para renovar</string>
     <string name="status_error">Error al generar pasaje</string>
+
+    <!-- Tiles & Complications -->
+    <string name="tile_name">bip!QR</string>
+    <string name="tile_description">Acceso rápido a saldo bip! y generación de código QR</string>
+    <string name="tile_btn_generate">Generar QR</string>
+    <string name="tile_btn_link">Vincular</string>
+    <string name="tile_status_offline_ready">Offline listo</string>
+    <string name="tile_status_not_linked">No vinculada</string>
+    <string name="tile_status_online">Online</string>
+    <string name="tile_dale_qr_target">¡Viajes Gratis!</string>
+    <string name="tile_dale_qr_prefix">Dale QR: </string>
+    <string name="complication_name">Saldo bip! y Dale QR</string>
+    <string name="complication_description">Muestra el saldo disponible y progreso de Dale QR</string>
 </resources>

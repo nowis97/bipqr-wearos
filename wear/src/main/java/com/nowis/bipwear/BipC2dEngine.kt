@@ -8,6 +8,7 @@ import android.util.Base64
 import android.util.Log
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.aztec.AztecWriter
+import com.nowis.bipwear.tile.BipSurfaceUpdateHelper
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.json.JSONObject
 import java.nio.ByteBuffer
@@ -187,6 +188,12 @@ object BipC2dEngine {
     fun saveConfig(context: Context, config: StandaloneConfig) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_CONFIG_JSON, config.toJson().toString()).apply()
+        // Notify Wear OS surfaces (Tile and Complication)
+        try {
+            BipSurfaceUpdateHelper.requestSurfaceUpdates(context.applicationContext ?: context)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error actualizando superficies Wear OS", e)
+        }
     }
 
     fun sha256Hex(input: String): String {

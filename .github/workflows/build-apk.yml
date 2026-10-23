@@ -2,7 +2,7 @@ name: Build and Release Watch APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feature/**" ]
     tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
@@ -32,8 +32,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Wear OS Debug APK
-        run: ./gradlew :wear:assembleDebug --stacktrace
+      - name: Run Unit Tests and Build Wear OS Debug APK
+        run: ./gradlew :wear:testDebugUnitTest :wear:assembleDebug --stacktrace
 
       - name: Prepare APK output
         run: |
