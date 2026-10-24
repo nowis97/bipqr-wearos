@@ -7,10 +7,14 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -75,77 +79,128 @@ fun IdleScreen(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            Text(
-                text = "bip!QR",
-                color = Color(0xFFE50914),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(2.dp))
-
-            val subtitleText = if (isProvisioned) {
-                val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
-                val tramaStatus = if (isOfflineReady) "Offline listo" else "Online 2h"
-                "${cfg.rut} · $$clp ($tramaStatus)"
-            } else {
-                stringResource(R.string.status_not_provisioned)
-            }
-
-            Text(
-                text = subtitleText,
-                color = Color(0xFFAAAAAA),
-                fontSize = 10.sp,
-                textAlign = TextAlign.Center
-            )
-
             if (isProvisioned) {
+                Text(
+                    text = "bip!QR",
+                    color = Color(0xFFE50914),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
+                Text(
+                    text = "$$clp",
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(if (isOfflineReady) Color(0xFF00E676) else Color(0xFF00E5FF))
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isOfflineReady) "Offline listo" else "Online",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(6.dp))
+
                 DaleQrBadge(
                     acumulado = cfg.daleQrAcumulado,
                     meta = cfg.daleQrMeta,
                     isReached = cfg.isDaleQrReached,
                     onClick = onRefreshDaleQr
                 )
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(7.dp))
 
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFFE50914))
-                    .combinedClickable(
-                        onClick = { if (isProvisioned) onGenerate() else onRelink() },
-                        onLongClick = { if (isProvisioned) onRelink() }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFFE50914))
+                        .combinedClickable(
+                            onClick = onGenerate,
+                            onLongClick = onRelink
+                        )
+                        .padding(horizontal = 16.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.btn_generate),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center
                     )
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isProvisioned) stringResource(R.string.btn_generate) else stringResource(R.string.btn_link_clave_unica),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
+                }
 
-            if (isProvisioned) {
                 Spacer(modifier = Modifier.height(5.dp))
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF1E1E1E))
+                        .background(Color(0x2EFFFFFF))
                         .clickable { onViewMovements() }
                         .padding(horizontal = 10.dp, vertical = 3.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "📋 Movimientos",
-                        color = Color(0xFFDDDDDD),
+                        color = Color(0xFFE2E8F0),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                Text(
+                    text = "bip!QR",
+                    color = Color(0xFFE50914),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(R.string.status_not_provisioned),
+                    color = Color(0xFF94A3B8),
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFFE50914))
+                        .clickable { onRelink() }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.btn_link_clave_unica),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -195,8 +250,8 @@ fun DaleQrBadge(
 
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF1A1A1A))
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0x2200E5FF))
                 .clickable { onClick() }
                 .padding(horizontal = 8.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center

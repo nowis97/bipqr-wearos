@@ -78,7 +78,7 @@ fun MovementsScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF222222))
+                        .background(Color(0x2EFFFFFF))
                         .clickable { onBack() }
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
@@ -133,7 +133,7 @@ fun MovementsScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF222222))
+                            .background(Color(0x2EFFFFFF))
                             .clickable { onBack() }
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {

@@ -78,7 +78,8 @@ fun TicketScreen(
     } else {
         String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
-    val timerColor = if (isExpired) Color(0xFFE50914) else Color(0xFF00E676)
+    val timerColor = if (isExpired) Color(0xFFEF4444) else Color(0xFFF1F5F9)
+    val timerBgColor = if (isExpired) Color(0x33EF4444) else Color(0x2EFFFFFF)
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -115,15 +116,24 @@ fun TicketScreen(
                 .fillMaxSize()
                 .padding(bottom = 2.dp)
         ) {
-            Text(
-                text = timerText,
-                color = timerColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            // Option A: Pill chip translúcido con temporizador
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(timerBgColor)
+                    .padding(horizontal = 9.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isExpired) timerText else "⏳ $timerText",
+                    color = timerColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+            }
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             // Contenedor blanco de alto contraste para lectura óptica en torniquetes
             Box(
@@ -153,8 +163,9 @@ fun TicketScreen(
 
             Text(
                 text = instructionsText,
-                color = Color(0xFFAAAAAA),
-                fontSize = 9.sp,
+                color = Color(0xFFE2E8F0),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
 
@@ -162,15 +173,15 @@ fun TicketScreen(
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF1E1E1E))
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0x2EFFFFFF))
                     .clickable { onViewMovements() }
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                    .padding(horizontal = 9.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "📋 Movimientos",
-                    color = Color(0xFFDDDDDD),
+                    color = Color(0xFFF1F5F9),
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center
