@@ -418,7 +418,7 @@ fun BipWearApp(
         }
     }
 
-    Scaffold(timeText = { if (ticketState !is MainUiState.Active) TimeText() }) {
+    Scaffold(timeText = { if (ticketState is MainUiState.Movements) TimeText() }) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
