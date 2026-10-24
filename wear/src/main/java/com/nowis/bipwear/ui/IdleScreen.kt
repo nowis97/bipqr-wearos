@@ -64,8 +64,8 @@ fun IdleScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(5.dp),
-                startAngle = 270f,
-                endAngle = 270f,
+                startAngle = 295f,
+                endAngle = 245f,
                 indicatorColor = ringColor,
                 trackColor = ringTrackColor,
                 strokeWidth = 4.dp
