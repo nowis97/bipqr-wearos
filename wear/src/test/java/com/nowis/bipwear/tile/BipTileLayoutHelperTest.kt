@@ -2,6 +2,8 @@ package com.nowis.bipwear.tile
 
 import com.nowis.bipwear.StandaloneConfig
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BipTileLayoutHelperTest {
@@ -59,5 +61,17 @@ class BipTileLayoutHelperTest {
 
         val emptyConfig = StandaloneConfig(saldo = 0)
         assertEquals("$0", BipTileLayoutHelper.getFormattedBalance(emptyConfig))
+    }
+
+    @Test
+    fun testIsLowBalanceLogic() {
+        val lowBal = StandaloneConfig(saldo = 500)
+        assertTrue(lowBal.isLowBalance)
+
+        val normalBal = StandaloneConfig(saldo = 1200)
+        assertFalse(normalBal.isLowBalance)
+
+        val lowBalWithFreeTrips = StandaloneConfig(saldo = 500, daleQrAcumulado = 42000, daleQrMeta = 42000)
+        assertFalse(lowBalWithFreeTrips.isLowBalance)
     }
 }

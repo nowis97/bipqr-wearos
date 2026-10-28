@@ -64,6 +64,9 @@ data class StandaloneConfig(
     val daleQrProgress: Float
         get() = if (daleQrMeta > 0) (daleQrAcumulado.toFloat() / daleQrMeta.toFloat()).coerceIn(0f, 1f) else 0f
 
+    val isLowBalance: Boolean
+        get() = saldo < 850 && !isDaleQrReached
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("privKeyBase64", privKeyBase64)
         put("pubKeyBase64", pubKeyBase64)
@@ -368,8 +371,13 @@ object BipC2dEngine {
         latitude: Double = DEFAULT_LAT,
         longitude: Double = DEFAULT_LON,
         accuracy: Float = DEFAULT_ACCURACY,
-        size: Int = 240
+        size: Int = 0
     ): GeneratedTicketResult {
+        val targetSize = if (size > 0) {
+            size
+        } else {
+            (116f * context.resources.displayMetrics.density).roundToInt().coerceAtLeast(180)
+        }
         val cfg = loadConfig(context)
         val tramaSC = cfg.tramaSistemaCentral.trim().uppercase(Locale.US)
         require(tramaSC.length == 62) { "Trama del sistema central inválida o ausente" }
@@ -418,7 +426,7 @@ object BipC2dEngine {
         val strB3 = bytesToHexUppercase(sigBytes)
 
         val finalAztecString = strConcat + strB3
-        val bitmap = renderAztecBitmap(finalAztecString, size)
+        val bitmap = renderAztecBitmap(finalAztecString, targetSize)
 
         return GeneratedTicketResult(
             aztecPayload = finalAztecString,

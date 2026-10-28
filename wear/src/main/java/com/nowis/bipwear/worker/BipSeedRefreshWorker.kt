@@ -37,8 +37,14 @@ class BipSeedRefreshWorker(
                 RedApiClient.requestC2dSeed(applicationContext)
                 Log.i(TAG, "Semilla C2D renovada con éxito en segundo plano")
             } catch (e: Exception) {
+                val msg = (e.message ?: "").lowercase(java.util.Locale.ROOT)
+                val isAuthError = msg.contains("session") || msg.contains("token") || msg.contains("401") || msg.contains("403")
                 Log.w(TAG, "Fallo al renovar semilla C2D en segundo plano: ${e.message}")
-                return@withContext Result.retry()
+                return@withContext if (isAuthError || runAttemptCount >= 3) {
+                    Result.failure()
+                } else {
+                    Result.retry()
+                }
             }
         } else {
             Log.d(TAG, "Semilla C2D aún vigente (${remainingMs / 60000} min restantes)")

@@ -80,7 +80,7 @@ fun IdleScreen(
                 .padding(horizontal = 20.dp)
         ) {
             if (isProvisioned) {
-                val isLowBalance = cfg.saldo < 850 && !cfg.isDaleQrReached
+                val isLowBalance = cfg.isLowBalance
                 val balanceColor = if (isLowBalance) Color(0xFFFFB74D) else Color.White
 
                 Text(

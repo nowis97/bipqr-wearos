@@ -108,7 +108,7 @@ object BipTileLayoutHelper {
         )
 
         if (config.isProvisioned) {
-            val isLowBalance = config.saldo < 850 && !config.isDaleQrReached
+            val isLowBalance = config.isLowBalance
             val balanceColor = if (isLowBalance) COLOR_AMBER_WARNING else COLOR_WHITE
 
             // Balance

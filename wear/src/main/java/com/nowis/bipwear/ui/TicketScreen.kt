@@ -56,8 +56,10 @@ fun TicketScreen(
         }
     }
 
-    // Auto-apagado de seguridad: vuelve a Idle tras 60s para no drenar batería con brillo 100% y FLAG_KEEP_SCREEN_ON
-    LaunchedEffect(ticket.expiryTimestampMs) {
+    var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    // Auto-apagado de seguridad: vuelve a Idle tras 60s de inactividad para no drenar batería con brillo 100%
+    LaunchedEffect(lastInteractionTime) {
         delay(60_000L)
         onClose()
     }
@@ -150,7 +152,10 @@ fun TicketScreen(
                     .size(122.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.White)
-                    .clickable { onRefresh() }
+                    .clickable {
+                    lastInteractionTime = System.currentTimeMillis()
+                    onRefresh()
+                }
                     .padding(3.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -165,7 +170,7 @@ fun TicketScreen(
             Spacer(modifier = Modifier.height(3.dp))
 
             val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(ticket.saldo)
-            val isLowBalance = ticket.saldo < 850 && !cfg.isDaleQrReached
+            val isLowBalance = cfg.isLowBalance
             val instructionsText = if (ticket.saldo > 0) {
                 if (isLowBalance) "Saldo bajo: $$clp" else "Saldo: $$clp"
             } else {
