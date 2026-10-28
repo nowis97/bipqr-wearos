@@ -24,25 +24,24 @@ object BipTileLayoutHelper {
     const val COLOR_RED_BRAND = 0xFFE50914.toInt()
     const val COLOR_CYAN_DALE_QR = 0xFF00E5FF.toInt()
     const val COLOR_GREEN_SUCCESS = 0xFF00E676.toInt()
+    const val COLOR_AMBER_WARNING = 0xFFFFB74D.toInt()
     const val COLOR_TRACK = 0x3300E5FF.toInt()
     const val COLOR_MUTED_GRAY = 0xFF9E9E9E.toInt()
     const val COLOR_WHITE = 0xFFFFFFFF.toInt()
 
     fun calculateDaleQrProgress(config: StandaloneConfig): Float {
-        if (config.daleQrAcumulado <= 0) return 0f
-        val fraction = config.daleQrAcumulado.toFloat() / 42000f
-        return fraction.coerceIn(0f, 1f)
+        return config.daleQrProgress
     }
 
     fun getDaleQrProgressColor(config: StandaloneConfig): Int {
-        return if (config.daleQrAcumulado >= 42000) COLOR_GREEN_SUCCESS else COLOR_CYAN_DALE_QR
+        return if (config.isDaleQrReached) COLOR_GREEN_SUCCESS else COLOR_CYAN_DALE_QR
     }
 
     fun getDaleQrStatusText(config: StandaloneConfig): String {
-        return if (config.daleQrAcumulado >= 42000) {
+        return if (config.isDaleQrReached) {
             "🎉 ¡Viajes Gratis!"
         } else {
-            val pct = (calculateDaleQrProgress(config) * 100).toInt()
+            val pct = (config.daleQrProgress * 100).toInt()
             "Dale QR: $pct%"
         }
     }
@@ -109,11 +108,14 @@ object BipTileLayoutHelper {
         )
 
         if (config.isProvisioned) {
+            val isLowBalance = config.saldo < 850 && !config.isDaleQrReached
+            val balanceColor = if (isLowBalance) COLOR_AMBER_WARNING else COLOR_WHITE
+
             // Balance
             column.addContent(
                 Text.Builder(context, getFormattedBalance(config))
                     .setTypography(Typography.TYPOGRAPHY_DISPLAY2)
-                    .setColor(argb(COLOR_WHITE))
+                    .setColor(argb(balanceColor))
                     .build()
             )
 
@@ -125,16 +127,16 @@ object BipTileLayoutHelper {
                     .build()
             )
 
-            // Status chip: Offline listo vs Online
-            val statusText = if (isOfflineReady) {
-                context.getString(R.string.tile_status_offline_ready)
-            } else {
-                context.getString(R.string.tile_status_online)
+            // Status chip: Saldo bajo vs Offline listo vs Online
+            val (statusText, statusColor) = when {
+                isLowBalance -> "⚠️ Saldo bajo" to COLOR_AMBER_WARNING
+                isOfflineReady -> "● " + context.getString(R.string.tile_status_offline_ready) to COLOR_GREEN_SUCCESS
+                else -> "● " + context.getString(R.string.tile_status_online) to COLOR_MUTED_GRAY
             }
             column.addContent(
-                Text.Builder(context, "● $statusText")
+                Text.Builder(context, statusText)
                     .setTypography(Typography.TYPOGRAPHY_CAPTION2)
-                    .setColor(argb(if (isOfflineReady) COLOR_GREEN_SUCCESS else COLOR_MUTED_GRAY))
+                    .setColor(argb(statusColor))
                     .build()
             )
 

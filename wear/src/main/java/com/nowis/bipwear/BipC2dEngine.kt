@@ -368,7 +368,7 @@ object BipC2dEngine {
         latitude: Double = DEFAULT_LAT,
         longitude: Double = DEFAULT_LON,
         accuracy: Float = DEFAULT_ACCURACY,
-        size: Int = 340
+        size: Int = 240
     ): GeneratedTicketResult {
         val cfg = loadConfig(context)
         val tramaSC = cfg.tramaSistemaCentral.trim().uppercase(Locale.US)
@@ -429,7 +429,7 @@ object BipC2dEngine {
         )
     }
 
-    fun renderAztecBitmap(data: String, size: Int = 340): Bitmap {
+    fun renderAztecBitmap(data: String, size: Int = 240): Bitmap {
         val writer = AztecWriter()
         val bitMatrix = writer.encode(data, BarcodeFormat.AZTEC, size, size)
         val width = bitMatrix.width

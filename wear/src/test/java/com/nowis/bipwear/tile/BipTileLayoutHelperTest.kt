@@ -19,6 +19,10 @@ class BipTileLayoutHelperTest {
 
         val configOver = StandaloneConfig(daleQrAcumulado = 50000)
         assertEquals(1.0f, BipTileLayoutHelper.calculateDaleQrProgress(configOver), 0.001f)
+
+        // Dynamic custom meta (e.g. 30000)
+        val configDynamic = StandaloneConfig(daleQrAcumulado = 15000, daleQrMeta = 30000)
+        assertEquals(0.5f, BipTileLayoutHelper.calculateDaleQrProgress(configDynamic), 0.001f)
     }
 
     @Test
@@ -30,6 +34,10 @@ class BipTileLayoutHelperTest {
         // Reached target: Neon Green #00E676 (0xFF00E676)
         val reachedTarget = StandaloneConfig(daleQrAcumulado = 42000)
         assertEquals(0xFF00E676.toInt(), BipTileLayoutHelper.getDaleQrProgressColor(reachedTarget))
+
+        // Dynamic target reached
+        val dynamicReached = StandaloneConfig(daleQrAcumulado = 30000, daleQrMeta = 30000)
+        assertEquals(0xFF00E676.toInt(), BipTileLayoutHelper.getDaleQrProgressColor(dynamicReached))
     }
 
     @Test
@@ -39,6 +47,9 @@ class BipTileLayoutHelperTest {
 
         val reachedTarget = StandaloneConfig(daleQrAcumulado = 42000)
         assertEquals("🎉 ¡Viajes Gratis!", BipTileLayoutHelper.getDaleQrStatusText(reachedTarget))
+
+        val dynamicReached = StandaloneConfig(daleQrAcumulado = 35000, daleQrMeta = 35000)
+        assertEquals("🎉 ¡Viajes Gratis!", BipTileLayoutHelper.getDaleQrStatusText(dynamicReached))
     }
 
     @Test

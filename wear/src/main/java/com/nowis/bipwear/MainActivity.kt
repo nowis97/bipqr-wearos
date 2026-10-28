@@ -44,6 +44,7 @@ import com.nowis.bipwear.ui.state.MainUiState
 import com.nowis.bipwear.util.BipHapticHelper
 import com.nowis.bipwear.viewmodel.MainViewModel
 import com.nowis.bipwear.viewmodel.MovementsViewModel
+import com.nowis.bipwear.worker.BipSeedRefreshWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener, Mess
         super.onCreate(savedInstanceState)
         observeTicketState()
         syncStoredDataItems()
+        BipSeedRefreshWorker.schedule(applicationContext)
 
         // Handle physical back button: return to Idle instead of instantly exiting if on Ticket or Movements screen
         onBackPressedDispatcher.addCallback(this) {
@@ -450,7 +452,11 @@ fun BipWearApp(
                         cfg = cfg,
                         onRefresh = onGenerateTicket,
                         onAutoRefreshTriggered = onAutoRefreshTriggered,
-                        onViewMovements = { mainViewModel.setState(MainUiState.Movements) }
+                        onViewMovements = { mainViewModel.setState(MainUiState.Movements) },
+                        onClose = {
+                            TicketManager.setState(TicketState.Idle)
+                            mainViewModel.resetToIdle()
+                        }
                     )
                 }
                 is MainUiState.Movements -> {

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -44,7 +45,8 @@ fun TicketScreen(
     cfg: StandaloneConfig,
     onRefresh: () -> Unit,
     onAutoRefreshTriggered: () -> Unit,
-    onViewMovements: () -> Unit
+    onViewMovements: () -> Unit,
+    onClose: () -> Unit = {}
 ) {
     LaunchedEffect(ticket.expiryTimestampMs) {
         while (isActive) {
@@ -52,6 +54,12 @@ fun TicketScreen(
             delay(intervalMs)
             onAutoRefreshTriggered()
         }
+    }
+
+    // Auto-apagado de seguridad: vuelve a Idle tras 60s para no drenar batería con brillo 100% y FLAG_KEEP_SCREEN_ON
+    LaunchedEffect(ticket.expiryTimestampMs) {
+        delay(60_000L)
+        onClose()
     }
 
     var remainingMs by remember(ticket.expiryTimestampMs) {
@@ -85,7 +93,7 @@ fun TicketScreen(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        // Anillo Dale QR en el bisel exterior
+        // Anillo Dale QR en el bisel exterior (estilo gauge con apertura superior)
         if (cfg.isProvisioned) {
             val rawProgress = cfg.daleQrProgress
             val progress = when {
@@ -136,6 +144,7 @@ fun TicketScreen(
             Spacer(modifier = Modifier.height(3.dp))
 
             // Contenedor blanco de alto contraste para lectura óptica en torniquetes
+            // filterQuality = FilterQuality.None garantiza bordes duros pixel-perfect para scanners láser
             Box(
                 modifier = Modifier
                     .size(122.dp)
@@ -148,6 +157,7 @@ fun TicketScreen(
                 Image(
                     bitmap = ticket.bitmap.asImageBitmap(),
                     contentDescription = "bip!QR Ticket",
+                    filterQuality = FilterQuality.None,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -155,15 +165,16 @@ fun TicketScreen(
             Spacer(modifier = Modifier.height(3.dp))
 
             val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(ticket.saldo)
+            val isLowBalance = ticket.saldo < 850 && !cfg.isDaleQrReached
             val instructionsText = if (ticket.saldo > 0) {
-                "Saldo: $$clp"
+                if (isLowBalance) "Saldo bajo: $$clp" else "Saldo: $$clp"
             } else {
                 stringResource(R.string.status_ticket_ready)
             }
 
             Text(
                 text = instructionsText,
-                color = Color(0xFFE2E8F0),
+                color = if (isLowBalance) Color(0xFFFFB74D) else Color(0xFFE2E8F0),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center

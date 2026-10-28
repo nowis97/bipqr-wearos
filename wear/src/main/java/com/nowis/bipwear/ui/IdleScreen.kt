@@ -80,6 +80,9 @@ fun IdleScreen(
                 .padding(horizontal = 20.dp)
         ) {
             if (isProvisioned) {
+                val isLowBalance = cfg.saldo < 850 && !cfg.isDaleQrReached
+                val balanceColor = if (isLowBalance) Color(0xFFFFB74D) else Color.White
+
                 Text(
                     text = "bip!QR",
                     color = Color(0xFFE50914),
@@ -93,7 +96,7 @@ fun IdleScreen(
                 val clp = NumberFormat.getIntegerInstance(Locale("es", "CL")).format(cfg.saldo)
                 Text(
                     text = "$$clp",
-                    color = Color.White,
+                    color = balanceColor,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center
@@ -105,6 +108,14 @@ fun IdleScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
+                    if (isLowBalance) {
+                        Text(
+                            text = "⚠️ Saldo bajo · ",
+                            color = Color(0xFFFFB74D),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .size(5.dp)
